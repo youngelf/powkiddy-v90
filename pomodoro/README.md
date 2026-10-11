@@ -1,4 +1,7 @@
-# pom1 — Pomodoro Work Timer for PowKiddy V90 (MiyooCFW 1.3.3) & Linux Host
+# Pomodoro Work Timer for PowKiddy V90 (MiyooCFW 1.3.3) & Linux Host
+
+![Screenshot of pomodoro](/pomodoro/promo/pomodoro_grab.png)
+
 
 A Pomodoro timer and work-hours tracker written in C (`pom1.c`) that builds from the exact same source file for:
 1. **PowKiddy V90** running **MiyooCFW 1.3.3** (320×240 16-bit display, Allwinner F1C100S ARM926EJ-S, uClibc + SDL 1.2).

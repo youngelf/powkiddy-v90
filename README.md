@@ -11,7 +11,7 @@ also compile natively on Linux x11 so you can test them out before
 copying it on the SD-card for running on your Powkiddy.
 
 
-##[Metronome](metronome/)
+## [Metronome](metronome/)
 
 A simple metronome that shows some common time signatures, and plays a
 tick on the beat.
@@ -19,7 +19,7 @@ tick on the beat.
 ![Screenshot of metronome](/metronome/promo/metronome_grab.png)
 
 
-##[Pomodoro](pomodoro/)
+## [Pomodoro](pomodoro/)
 
 A work timer to let folks know that you are working.
 

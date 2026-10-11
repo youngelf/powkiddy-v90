@@ -1,5 +1,7 @@
 # PowKiddy V90 Metronome (MiyooCFW 1.3.3 & Linux Desktop)
 
+![Screenshot of metronome](/metronome/promo/metronome_grab.png)
+
 A lightweight, precision C metronome designed for the **PowKiddy V90** handheld running **MiyooCFW 1.3.3** (320×240 16-bit display, Allwinner F1C100S ARM926EJ-S), with a native **x86_64 Linux (X11)** target for fast desktop testing and debugging.
 
 ## Features
