@@ -1,0 +1,5 @@
+title=Metronome
+description=Precision Metronome with Time Signatures & Accent
+exec=/mnt/apps/metronome/metronome
+icon=/mnt/apps/metronome/metronome.png
+clock=504
