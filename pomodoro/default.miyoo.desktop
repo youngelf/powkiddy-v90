@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Pomodoro
+Comment=Pomodoro Work Timer & Hours Tracker
+Exec=pomodoro
+Terminal=false
+Type=Application
+StartupNotify=true
+Icon=pomodoro
+Categories=applications;

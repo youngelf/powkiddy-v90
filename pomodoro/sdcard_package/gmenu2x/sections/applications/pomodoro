@@ -1,0 +1,5 @@
+title=Pomodoro
+description=Pomodoro Work Timer & Hours Tracker
+exec=/mnt/apps/pomodoro/pomodoro
+icon=/mnt/apps/pomodoro/pomodoro.png
+clock=200
