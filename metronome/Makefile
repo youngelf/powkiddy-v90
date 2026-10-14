@@ -1,7 +1,13 @@
 # Makefile for PowKiddy V90 (MiyooCFW 1.3.3) & Linux Host Metronome
 
 # --- PowKiddy V90 (ARM Cross-Compiler) Configuration ---
-CHAINPREFIX ?= /tmp/miyoo_sdk_extract/opt/miyoo
+ifneq ($(wildcard /opt/miyoo/usr/bin/arm-miyoo-linux-uclibcgnueabi-gcc),)
+    CHAINPREFIX ?= /opt/miyoo
+else ifneq ($(wildcard /tmp/miyoo_sdk_extract/opt/miyoo/usr/bin/arm-miyoo-linux-uclibcgnueabi-gcc),)
+    CHAINPREFIX ?= /tmp/miyoo_sdk_extract/opt/miyoo
+else
+    CHAINPREFIX ?= /opt/miyoo
+endif
 CROSS_COMPILE = $(CHAINPREFIX)/usr/bin/arm-miyoo-linux-uclibcgnueabi-
 SYSROOT = $(CHAINPREFIX)/arm-miyoo-linux-uclibcgnueabi/sysroot
 
