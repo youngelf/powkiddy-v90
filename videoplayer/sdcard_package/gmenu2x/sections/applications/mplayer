@@ -1,0 +1,5 @@
+title=Video Player
+description=Full-Screen Video Player
+icon=/mnt/apps/videoplayer/icon.png
+exec=/mnt/apps/videoplayer/run.sh
+clock=702
