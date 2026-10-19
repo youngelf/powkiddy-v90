@@ -1,0 +1,5 @@
+title=Calculator
+description=Desk & Scientific Calculator
+exec=/mnt/apps/calc/calc
+icon=/mnt/apps/calc/icon.png
+clock=702
