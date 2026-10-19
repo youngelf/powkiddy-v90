@@ -6,9 +6,9 @@
  * Controls on PowKiddy V90 (MiyooCFW 1.3.3) & Linux Host:
  *   D-Pad (UP/DOWN/LEFT/RIGHT) : Navigate keypad grid (wraps around edges)
  *   A or B (LAlt / LCtrl)      : Activate selected key
- *   SELECT (Escape)            : Toggle Desk Calculator <-> Scientific Calculator mode
+ *   SELECT (Escape)            : Toggle Basic Calculator <-> Scientific Calculator mode
  *   X (LShift)                 : Clear (C / AC)
- *   Y or R1 (Space / Backspace): Delete last digit (DEL)
+ *   R1 (Backspace)             : Delete last digit (DEL)
  *   L1 (Tab)                   : Toggle Degrees (DEG) <-> Radians (RAD)
  *   START (Return / Enter)     : Quit calculator
  *   MENU (RCtrl) or 'Q'        : Quit calculator
@@ -1104,7 +1104,7 @@ static void render_ui(SDL_Surface *screen) {
     fill_rect(0, 226, SCREEN_W, 14, RGB(11, 15, 25));
     fill_rect(0, 226, SCREEN_W, 1,  RGB(30, 41, 59));
     draw_text_centered(FONT_10, 0, 227, SCREEN_W, 13,
-                       "A/B:Input  SELECT:Basic/Sci  X:Clr  Y:Del  START:Quit",
+                       "A/B:Input  SELECT:Basic/Sci  X:Clr  START:Quit",
                        RGB(148, 163, 184));
 
     present_frame(screen);
@@ -1216,8 +1216,8 @@ int main(int argc, char *argv[]) {
                 else if (k == V90_BTN_X || k == SDLK_x) {
                     clear_all();
                 }
-                /* Y or R1 (Backspace / 'Y'): Delete last digit (DEL) */
-                else if (k == V90_BTN_R1 || k == SDLK_y) {
+                /* R1 (Backspace): Delete last digit (DEL) */
+                else if (k == V90_BTN_R1) {
                     backspace_digit();
                 }
                 /* L1 (Tab): Toggle DEG / RAD */

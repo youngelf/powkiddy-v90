@@ -57,7 +57,7 @@ Disassembly of the stock `/mnt/apps/calc/calc` ELF binary (`bittboy-calc/main.c`
 | **Press Selected Button** | **`A`** (`LAlt`) or **`B`** (`LCtrl`) | `A`, `B`, `Space`, `Left Alt`, `Left Ctrl`, or direct keys (`0`-`9`, `+`, `-`, `*`, `/`, `=`) |
 | **Switch Mode (`BASIC` $\leftrightarrow$ `SCI`)** | **`SELECT`** (`Escape`) | `Home` or `Esc` |
 | **Clear All (`C` / `AC`)** | **`X`** (`LShift`) | `X`, `Left Shift`, or `C` |
-| **Delete Last Digit (`DEL`)** | **`Y`** (`Space`) or **`R1`** (`Backspace`) | `Y` or `Backspace` |
+| **Delete Last Digit (`DEL`)** | **`R1`** (`Backspace`) | `Backspace` |
 | **Toggle `DEG` / `RAD`** | **`L1`** (`Tab`) | `Tab` |
 | **Quit Calculator** | **`START`** (`Return`) or **`MENU`** (`RCtrl`) | `Enter`, `Right Ctrl`, or `Q` |
 
