@@ -1,0 +1,5 @@
+title=bard
+description=EPUB & TXT Reader
+exec=/mnt/apps/bard/bard
+icon=/mnt/apps/bard/icon.png
+clock=702
