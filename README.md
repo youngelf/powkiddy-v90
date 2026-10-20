@@ -17,6 +17,8 @@ Every application in this repository compiles both for the **PowKiddy V90 (`arm-
 | [`calc/`](calc/) | **Desk & Scientific Calculator (`BASIC` / `SCI`)** — High-contrast calculator with full `<math.h>` scientific functions | `/mnt/apps/calc/calc` | `calc/calc_linux` |
 | [`bard/`](bard/) | **EPUB E-Book Reader** — Text-only `.epub` reader (`libzip` + `libxml2`) with chapter selector, light/dark themes, and whole-page scrolling | `/mnt/apps/bard/bard` | `bard/bard_linux` |
 | [`videoplayer/`](videoplayer/) | **Native `320×240` Video Player** — Full-screen distraction-free video & ALSA audio player (`libavformat`, `libavcodec`, `libswscale`, `libswresample`) | `/mnt/apps/videoplayer/videoplayer` & `/mnt/gmenu2x/sections/applications/mplayer` | `videoplayer/videoplayer_linux` |
+| [`chordwheel/`](chordwheel/) | **Circle of Fifths & Guitar Voicing Synth (`chordwheel`)** — Interactive Circle of Fifths, 6-string fretboard chord diagrams, and Karplus-Strong guitar synth | `/mnt/apps/chordwheel/chordwheel` | `chordwheel/chordwheel_linux` |
+| [`eartrainer/`](eartrainer/) | **Guitar Interval & Chord Ear Trainer (`eartrainer`)** — 12 intervals & 12 chord qualities with 6-string fretboard visualizer, 3-guess flow, and Karplus-Strong guitar synth | `/mnt/apps/eartrainer/eartrainer` | `eartrainer/eartrainer_linux` |
 | [`gmu/`](gmu/) | **Gmu Music Player (Keymap Fix & Port)** — Fixes swapped `A`/`B` & `X`/`Y` buttons on V90 and adds modern GCC desktop build support | `/mnt/apps/gmu/` | `gmu/gmu.bin` |
 | [`patch_bootlogo/`](patch_bootlogo/) | **Boot Splash Patcher** — Replaces the embedded PNG inside `/mnt/boot-logo` on a `powkiddy-q90-v90-cfw-v1.3.3.img` image | `/mnt/boot-logo` inside `.img` | `patch_bootlogo/patch_boot_logo` |
 
@@ -87,7 +89,22 @@ See [`videoplayer/README.md`](videoplayer/README.md) for desktop setup, `ffmpeg`
 
 ---
 
-## 6. [Gmu Music Player Keymap Fix & Port (`gmu`)](gmu/)
+## 6. [Interactive Circle of Fifths & Guitar Synth (`chordwheel`)](chordwheel/)
+
+An interactive Circle of Fifths, 6-string guitar chord voicing visualizer, and fixed-point Karplus-Strong plucked-string synthesizer designed for guitarists:
+- **Interactive Circle of Fifths Wheel**: Shows all 12 Major keys (outer ring), 12 Relative Minor keys (inner ring), and `vii°` leading-tone diminished chords (center hub) with color-coded Tonic (`I/vi`), Subdominant (`IV/ii`), and Dominant (`V/iii`) diatonic windows.
+- **6-String Guitar Fretboard Diagrams (`L1` / `R1`)**: Displays playable Open/CAGED, 6th-string E-shape barre, and 5th-string A-shape barre voicings for every Triad and 7th chord (`B` toggles Triads $\leftrightarrow$ 7th chords).
+- **Karplus-Strong Guitar Strum (`A`) & 4-Bar Progression Looper (`X` / `Y`)**: Press **`A`** to hear the displayed 6-string guitar voicing strummed in real time, or queue a 4-chord progression loop.
+
+See [`chordwheel/README.md`](chordwheel/README.md) for controls, build instructions, and SD card deployment steps.
+
+| Key of C Major (`Triads`, Open `C`) | Key of G Major Locked (`7ths`, `Am7` 5fr E-Barre) | Key of F Major Auto-Loop (`Bb` A-Barre) | Help, Controls & Progression Looper (`Y`) |
+| :---: | :---: | :---: | :---: |
+| ![Main View](chordwheel/promo/chordwheel_main.png) | ![7ths & Barre View](chordwheel/promo/chordwheel_7ths.png) | ![Progression Loop View](chordwheel/promo/chordwheel_loop.png) | ![Help Modal](chordwheel/promo/chordwheel_help.png) |
+
+---
+
+## 7. [Gmu Music Player Keymap Fix & Port (`gmu`)](gmu/)
 
 Fixes the inverted face-button mappings in the stock MiyooCFW 1.3.3 Gmu Music Player (`A` $\leftrightarrow$ `B` and `X` $\leftrightarrow$ `Y` were swapped due to a Dingoo A320 keymap in `gmuinput.miyoo.conf`), reconstructs the Miyoo hardware backend ([`gmu/src/hw_miyoo.c`](gmu/src/hw_miyoo.c)), and updates the codebase to compile cleanly on modern desktop Linux GCC. See [`gmu/README.md`](gmu/README.md) for details.
 
@@ -97,10 +114,25 @@ Fixes the inverted face-button mappings in the stock MiyooCFW 1.3.3 Gmu Music Pl
 
 ---
 
-## 7. [Boot Splash Patcher (`patch_bootlogo`)](patch_bootlogo/)
+## 8. [Boot Splash Patcher (`patch_bootlogo`)](patch_bootlogo/)
 
 A zero-dependency C99 utility ([`patch_bootlogo/patch_boot_logo.c`](patch_bootlogo/patch_boot_logo.c)) that encodes a custom `.bmp` image into an RGBA PNG in memory and patches the `/mnt/boot-logo` binary inside a `powkiddy-q90-v90-cfw-v1.3.3.img` disk image. See [`patch_bootlogo/README.md`](patch_bootlogo/README.md) for usage instructions.
 
 | Stock Boot Splash (`Powkiddy®`) | Patched Boot Splash (`Linux inside`) |
 | :---: | :---: |
 | ![Stock Boot Splash](patch_bootlogo/promo/boot_splash_before.png) | ![Patched Boot Splash](patch_bootlogo/promo/boot_splash_after.png) |
+
+---
+
+## 9. [Guitar Interval & Chord Ear Trainer (`eartrainer`)](eartrainer/)
+
+A guitar-focused ear-training application ([`eartrainer/eartrainer.c`](eartrainer/eartrainer.c)) featuring a 6-voice Karplus-Strong plucked-string synthesizer and a 12-fret 6-string fretboard visualizer:
+- **Mode 1 — Interval Trainer (`INTERVALS`)**: Identifies all 12 intervals (`m2` through `P8`) in Ascending (`ASC`), Descending (`DESC`), Harmonic (`HARM`), or Mixed (`MIX`) styles across 3 difficulty tiers (`EASY`, `MEDIUM`, `ALL 12`).
+- **Mode 2 — Chord Quality Trainer (`CHORDS`)**: Press **`SELECT`** to switch to identifying 12 guitar chord types (`Major`, `Minor`, `dim`, `aug`, `sus2`, `sus4`, `Dom7`, `Maj7`, `m7`, `m7b5`, `dim7`, `7sus4`).
+- **3-Guess Flow & Fretboard Comparison (`X`)**: Gives you 3 tries per question before revealing the answer on the 6-string guitar neck, and lets you audition/compare any interval or chord from the same root note using **`X`**.
+
+See [`eartrainer/README.md`](eartrainer/README.md) for full controls, build instructions, and SD card deployment steps.
+
+| Interval Guessing (3 Tries) | Interval Answer & Fretboard Shape | Chord Quality Mode (`CHORDS`) | Lifetime Accuracy & Help (`Y`) |
+| :---: | :---: | :---: | :---: |
+| ![Interval Guessing](eartrainer/promo/eartrainer_intervals.png) | ![Interval Revealed](eartrainer/promo/eartrainer_revealed.png) | ![Chord Mode](eartrainer/promo/eartrainer_chords.png) | ![Help & Stats](eartrainer/promo/eartrainer_help.png) |

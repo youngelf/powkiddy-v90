@@ -1,0 +1,5 @@
+title=EarTrainer
+description=Guitar Interval & Chord Ear Trainer
+exec=/mnt/apps/eartrainer/eartrainer
+icon=/mnt/apps/eartrainer/icon.png
+clock=702
