@@ -19,6 +19,7 @@ Every application in this repository compiles both for the **PowKiddy V90 (`arm-
 | [`videoplayer/`](videoplayer/) | **Native `320×240` Video Player** — Full-screen distraction-free video & ALSA audio player (`libavformat`, `libavcodec`, `libswscale`, `libswresample`) | `/mnt/apps/videoplayer/videoplayer` & `/mnt/gmenu2x/sections/applications/mplayer` | `videoplayer/videoplayer_linux` |
 | [`chordwheel/`](chordwheel/) | **Circle of Fifths & Guitar Voicing Synth (`chordwheel`)** — Interactive Circle of Fifths, 6-string fretboard chord diagrams, and Karplus-Strong guitar synth | `/mnt/apps/chordwheel/chordwheel` | `chordwheel/chordwheel_linux` |
 | [`pocketband/`](pocketband/) | **Pocket Drum Machine, Bassline & Backing Track Jam Buddy (`pocketband`)** — `4/4` & `3/4` Blues/Rock/Jazz drum + bass + chord backing band with 12-fret guitar soloing scale map | `/mnt/apps/pocketband/pocketband` | `pocketband/pocketband_linux` |
+| [`fretboard/`](fretboard/) | **Interactive Guitar Fretboard, CAGED Scale, Chord & Arpeggio Reference (`fretboard`)** — 15-fret neck with 14 scales, 5 CAGED boxes, 12 chord qualities, Reverse Chord Finder, 6 tunings, and Karplus-Strong synth | `/mnt/apps/fretboard/fretboard` | `fretboard/fretboard_linux` |
 | [`eartrainer/`](eartrainer/) | **Guitar Interval & Chord Ear Trainer (`eartrainer`)** — 12 intervals & 12 chord qualities with 6-string fretboard visualizer, 3-guess flow, and Karplus-Strong guitar synth | `/mnt/apps/eartrainer/eartrainer` | `eartrainer/eartrainer_linux` |
 | [`gmu/`](gmu/) | **Gmu Music Player (Keymap Fix & Port)** — Fixes swapped `A`/`B` & `X`/`Y` buttons on V90 and adds modern GCC desktop build support | `/mnt/apps/gmu/` | `gmu/gmu.bin` |
 | [`patch_bootlogo/`](patch_bootlogo/) | **Boot Splash Patcher** — Replaces the embedded PNG inside `/mnt/boot-logo` on a `powkiddy-q90-v90-cfw-v1.3.3.img` image | `/mnt/boot-logo` inside `.img` | `patch_bootlogo/patch_boot_logo` |
@@ -152,3 +153,18 @@ See [`pocketband/README.md`](pocketband/README.md) for controls, build instructi
 | Guitarist Jam View (`Blues Shuffle 4/4`) | Step & Bassline Editor (`Classic Rock 4/4`) | `3/4` Waltz Jam View (`Jazz Waltz 3/4`) | Help & Groove Modal (`Y`) |
 | :---: | :---: | :---: | :---: |
 | ![Jam View](pocketband/promo/pocketband_jam.png) | ![Step Editor](pocketband/promo/pocketband_steps.png) | ![Jazz Waltz View](pocketband/promo/pocketband_waltz.png) | ![Help Modal](pocketband/promo/pocketband_help.png) |
+
+---
+
+## 11. [Interactive Guitar Fretboard, CAGED Scale, Chord & Arpeggio Reference (`fretboard`)](fretboard/)
+
+A full-neck 15-fret guitar reference ([`fretboard/fretboard.c`](fretboard/fretboard.c)) with a 6-voice Karplus-Strong guitar synthesizer:
+- **Mode 1 — `SCALES & CAGED` (Default)**: Explore 14 essential guitar scales & modes across Frets `0–15` or isolated into the **5 CAGED positions** (`L1`/`R1` cycles `ALL NECK` $\leftrightarrow$ `POS 1..5`), with color-coded Root (Gold), Chord-Tone Skeleton (Green), Characteristic/Blue Note (Pink), and Scale Tone (Cyan) dots. Press **`A`** to hear the scale/box played ascending across the strings with a live fret indicator.
+- **Mode 2 — `CHORDS & ARPEGGIOS`**: Inspect 12 chord qualities (`Major`, `Minor`, `7`, `maj7`, `m7`, `m7b5`, `dim7`, `sus2`, `sus4`, `add9`, `6`, `m6`) across **5 CAGED voicings up the neck** (`L1`/`R1`) overlaid on the full-neck arpeggio map, and press **`A`** to strum.
+- **Mode 3 — `FRET EXPLORER` (Reverse Chord & Note Finder)** & **6 Alternate Tunings (`Y`)**: Move a cursor across any string & fret to see its exact pitch (`F#3`), frequency (`185.0 Hz`), and interval, or lock notes with **`B`** to automatically identify custom chords (`Em(add9)`, `G/B`, etc.). Supports `Standard`, `Drop D`, `Eb Standard`, `D Standard`, `DADGAD`, and `Open G` tunings.
+
+See [`fretboard/README.md`](fretboard/README.md) for controls, build instructions, and SD card deployment steps.
+
+| Scales & CAGED Box View (`A Blues`, `POS 1`) | Chords & Arpeggios View (`Cmaj7`, `Voicing 2`) | Fret Explorer & Reverse Chord Finder (`Em(add9)`) | Help & 6 Guitar Tunings Modal (`Y`) |
+| :---: | :---: | :---: | :---: |
+| ![Scales & CAGED View](fretboard/promo/fretboard_scales.png) | ![Chords & Arpeggios View](fretboard/promo/fretboard_chords.png) | ![Fret Explorer View](fretboard/promo/fretboard_explorer.png) | ![Help & Tunings Modal](fretboard/promo/fretboard_help.png) |
