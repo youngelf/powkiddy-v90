@@ -2,7 +2,7 @@
 
 A port and keymap fix for the **Gmu Music Player** ([`denis-n-kuznetsov/gmu`](https://github.com/denis-n-kuznetsov/gmu)) targeting the **PowKiddy V90 / Q90** handheld running **MiyooCFW 1.3.3** (Allwinner F1C100S `ARM926EJ-S`, 320×240 16-bit display, SDL 1.2), along with a native **x86_64 Linux Desktop** build for testing and debugging.
 
-![Gmu Playlist Browser on PowKiddy V90](/gmu/promo/gmu_playlist.png)
+![Gmu Playlist Browser on PowKiddy V90](promo/gmu_playlist.png)
 
 ---
 
@@ -12,7 +12,7 @@ A port and keymap fix for the **Gmu Music Player** ([`denis-n-kuznetsov/gmu`](ht
 
 In the stock MiyooCFW 1.3.3 image (`apps/gmu/gmuinput.miyoo.conf`), the SDL keycode table was copied directly from `gmuinput.dingux.conf` (Dingoo A320), which swaps the SDL keycodes for **A/B** and **X/Y** relative to the PowKiddy V90's `miyoo_kbd` kernel driver:
 
-| Physical V90 Button | F1C100S GPIO Pin | Kernel `miyoo_kbd` Bitmask | Linux Keycode (`input.h`) | SDL 1.2 Keysym (`SDLKey`) | Stock `gmuinput.miyoo.conf` (Buggy) | Fixed [`gmu/gmuinput.miyoo.conf`](/gmu/gmuinput.miyoo.conf) |
+| Physical V90 Button | F1C100S GPIO Pin | Kernel `miyoo_kbd` Bitmask | Linux Keycode (`input.h`) | SDL 1.2 Keysym (`SDLKey`) | Stock `gmuinput.miyoo.conf` (Buggy) | Fixed [`gmuinput.miyoo.conf`](gmuinput.miyoo.conf) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **D-Pad Up** | `PE2` (`0x82`) | `0x0008` | `KEY_UP` (`103`) | `273` (`SDLK_UP`) | `273,Up` | `273,Up` |
 | **D-Pad Down** | `PE3` (`0x83`) | `0x0800` | `KEY_DOWN` (`108`) | `274` (`SDLK_DOWN`) | `274,Down` | `274,Down` |
@@ -31,27 +31,27 @@ In the stock MiyooCFW 1.3.3 image (`apps/gmu/gmuinput.miyoo.conf`), the SDL keyc
 Because `306` (`SDLK_LCTRL`, physical **B**) and `308` (`SDLK_LALT`, physical **A**) were reversed—and `304` (`SDLK_LSHIFT`, physical **X**) and `32` (`SDLK_SPACE`, physical **Y**) were also reversed—every on-screen prompt and help entry for `A`, `B`, `X`, and `Y` was inverted on the PowKiddy V90.
 
 ### 2. Reconstructed Miyoo Hardware Backend & Modern GCC Support
-- Reconstructed [`gmu/src/hw_miyoo.c`](/gmu/src/hw_miyoo.c) and [`gmu/src/hw_miyoo.h`](/gmu/src/hw_miyoo.h) from the disassembled MiyooCFW `gmu.bin` binary (OSS mixer control via `/dev/mixer`, backlight power control via `/sys/devices/platform/backlight/backlight/backlight/brightness` and `/mnt/.backlight.conf`).
-- Updated [`gmu/src/core.c`](/gmu/src/core.c), [`gmu/src/decloader.c`](/gmu/src/decloader.c), [`gmu/src/feloader.c`](/gmu/src/feloader.c), [`gmu/src/decoders/vorbis.c`](/gmu/src/decoders/vorbis.c), [`gmu/configure`](/gmu/configure), and [`gmu/Makefile`](/gmu/Makefile) to build cleanly on modern GCC (`-std=c23` / `-fno-common`) and support standard `libvorbisfile` on desktop Linux.
+- Reconstructed [`src/hw_miyoo.c`](src/hw_miyoo.c) and [`src/hw_miyoo.h`](src/hw_miyoo.h) from the disassembled MiyooCFW `gmu.bin` binary (OSS mixer control via `/dev/mixer`, backlight power control via `/sys/devices/platform/backlight/backlight/backlight/brightness` and `/mnt/.backlight.conf`).
+- Updated [`src/core.c`](src/core.c), [`src/decloader.c`](src/decloader.c), [`src/feloader.c`](src/feloader.c), [`src/decoders/vorbis.c`](src/decoders/vorbis.c), [`configure`](configure), and [`Makefile`](Makefile) to build cleanly on modern GCC (`-std=c23` / `-fno-common`) and support standard `libvorbisfile` on desktop Linux.
 
 ---
 
 ## Screenshots
 
 ### Playlist Browser & Play Mode Cycling (`B: Change play mode`)
-![Gmu Playlist View](/gmu/promo/gmu_playlist.png)
+![Gmu Playlist View](promo/gmu_playlist.png)
 
 ### Built-in Help Screen (`Select + Up`) Showing Corrected V90 Mappings
-![Gmu Help Screen](/gmu/promo/gmu_help.png)
+![Gmu Help Screen](promo/gmu_help.png)
 
 ### Track Info & Spectrum Analyzer (`Start` to Toggle View)
-![Gmu Track Info View](/gmu/promo/gmu_trackinfo.png)
+![Gmu Track Info View](promo/gmu_trackinfo.png)
 
 ### File Browser (`A: Add file/Ch.dir`, `Y: Add dir`, `B: Play file`)
-![Gmu File Browser View](/gmu/promo/gmu_filebrowser.png)
+![Gmu File Browser View](promo/gmu_filebrowser.png)
 
 ### About Gmu (`Select + A` from Playlist / Track Info)
-![Gmu About View](/gmu/promo/gmu_about.png)
+![Gmu About View](promo/gmu_about.png)
 
 ---
 
@@ -111,7 +111,7 @@ This builds `gmu/gmu.bin`, the SDL and HTTP frontends (`gmu/frontends/sdl.so`, `
 
 ### 3. Run on Desktop Linux
 
-Launch `gmu.bin` in a 320×240 window using [`gmu/gmu.miyoo-desktop.conf`](/gmu/gmu.miyoo-desktop.conf):
+Launch `gmu.bin` in a 320×240 window using [`gmu.miyoo-desktop.conf`](gmu.miyoo-desktop.conf):
 
 ```bash
 cd gmu
@@ -134,7 +134,7 @@ cp gmu/gmu.miyoo.conf      /path/to/sdcard/main/apps/gmu/gmu.miyoo.conf
 
 ### Option B: Cross-Compile for PowKiddy V90 (`arm-miyoo-linux-uclibcgnueabi`)
 
-If you have the MiyooCFW cross-compilation toolchain installed in `/opt/miyoo` (see [`metronome/README.md`](/metronome/README.md) for extraction instructions):
+If you have the MiyooCFW cross-compilation toolchain installed in `/opt/miyoo` (see [`../metronome/README.md`](../metronome/README.md) for extraction instructions):
 
 ```bash
 cd gmu

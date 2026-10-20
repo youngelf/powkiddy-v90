@@ -2,6 +2,10 @@
 
 A standalone, zero-dependency C99 tool (`patch_boot_logo`) that replaces the stock `"Powkiddy®"` boot splash graphic inside a pristine `powkiddy-q90-v90-cfw-v1.3.3.img` SD card image with a custom `.bmp` image (default: `tux_linux_inside.bmp`, `145×84` showing the Tux penguin logo and `"Linux inside"`).
 
+| Stock Boot Splash (`Powkiddy®`) | Patched Boot Splash (`Linux inside`) |
+| :---: | :---: |
+| ![Stock Boot Splash](promo/boot_splash_before.png) | ![Patched Boot Splash](promo/boot_splash_after.png) |
+
 ## Files
 
 - `patch_boot_logo.c`: Self-contained C99 source that reads an uncompressed 24-bit/32-bit `.bmp` image, encodes it into an RGBA PNG in memory using an internal RFC 1951 Fixed-Huffman + LZ77 Deflate compressor, and patches `/boot-logo` inside the firmware `.img`.
