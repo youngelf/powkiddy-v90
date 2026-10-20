@@ -57,8 +57,11 @@ flowchart LR
 6. **Chapter Selection Modal (`SELECT` + `DPAD UP/DOWN` + `A`)**:
    - Pressing **`SELECT`** opens the **CHAPTERS** overlay listing all chapters in the EPUB along with each chapter's page count.
    - **`DPAD UP` / `DPAD DOWN`** moves the selection highlight across chapters, and pressing **`A`** loads the selected chapter at Page 1.
-7. **Startup File Browser in `/mnt/media`**:
-   - Starts automatically in **`/mnt/media`** on the PowKiddy V90 SD card (falling back to `./media` on the Linux desktop so the unabridged sample `.epub` books in [`media/`](media/) are immediately visible).
+7. **Startup File Browser in `/mnt/media` & Automatic Position Resume**:
+   - Remembers the last opened book path, chapter, page, and light/dark theme in `/mnt/.bard_state.cfg` on the PowKiddy V90 (`~/.bard_state.cfg` on Linux desktop) when you turn pages or exit.
+   - When started afresh, if the saved book path exists and the saved chapter/page is valid, `bard` automatically resumes reading at that exact page.
+   - If the saved book path exists on disk but the saved location does not exist, `bard` opens that book to its first page (`Chapter 1, Page 1`).
+   - If no saved state exists or the saved book path no longer exists on the SD card, `bard` opens the file selector in **`/mnt/media`** (falling back to `./media` on the Linux desktop).
 
 ---
 

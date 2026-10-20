@@ -12,7 +12,7 @@
  *   UP / DOWN or R1 / L1            : Adjust current mode duration (+/- 1 min when stopped)
  *   R2 / L2                         : Adjust current mode duration (+/- 5 min when stopped)
  *   LEFT / RIGHT                    : Cycle mode backward / forward
- *   SELECT / MENU (or Esc / 'Q')    : Save & Exit
+ *   START (V90) / SELECT/MENU (SP)  : Save & Exit
  */
 
 #include <stdio.h>
@@ -1437,10 +1437,22 @@ int main(int argc, char *argv[]) {
                     accum_ms = 0;
                     save_stats();
                 }
-                /* SELECT / MENU (or Q / M): Save and exit */
+#if defined(TARGET_RG35XXSP)
+                /* SELECT / MENU (or Q / M): Save and exit on RG35XXSP */
                 else if (k == V90_BTN_SELECT || k == V90_BTN_RESET || k == SDLK_q || k == SDLK_m) {
                     running = false;
                 }
+#elif defined(HOST_X11)
+                /* START (Enter), Esc, Q, or M: Save and exit on Linux Host */
+                else if (k == V90_BTN_START || k == V90_BTN_SELECT || k == V90_BTN_RESET || k == SDLK_q || k == SDLK_m) {
+                    running = false;
+                }
+#else
+                /* START: Save and exit on PowKiddy V90 */
+                else if (k == V90_BTN_START) {
+                    running = false;
+                }
+#endif
             } else if (ev.type == SDL_KEYUP) {
                 SDLKey k = ev.key.keysym.sym;
                 if (k == V90_BTN_SELECT) select_held = false;
@@ -1660,7 +1672,11 @@ int main(int argc, char *argv[]) {
         draw_rect(screen, 110, 220, 62, 14, col_break);
         draw_text_centered(screen, 141, 224, "[X] MODE", 1, col_white);
 
+#if defined(TARGET_RG35XXSP)
         draw_text(screen, 180, 224, "[Y]RST [M/SEL]EXIT", 1, col_white);
+#else
+        draw_text(screen, 180, 224, "[Y]RST [START]EXIT", 1, col_white);
+#endif
 
         SDL_Flip(screen);
         SDL_Delay(50); /* ~20 FPS to save battery */

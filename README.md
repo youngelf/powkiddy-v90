@@ -56,7 +56,7 @@ See [`calc/README.md`](calc/README.md) for full controls, build instructions, an
 ## 4. [EPUB E-Book Reader (`bard`)](bard/)
 
 A fast C EPUB reader (`libzip` + `libxml2`) that replaces the stock `/mnt/apps/bard/bard` TTS reader:
-- **Starts in `/mnt/media`**: Opens a file browser directly in `/mnt/media` on the SD card (includes unabridged sample books in [`bard/media/`](bard/media/)).
+- **Starts in `/mnt/media` & Remembers Last Reading Position**: Automatically saves the active book path, chapter, and page (`/mnt/.bard_state.cfg` on V90, `~/.bard_state.cfg` on desktop) when you exit and resumes from your exact page on the next launch. If the saved book path exists but the saved location does not, it opens the book to its first page; if the saved path does not exist, it opens the `/mnt/media` file selector.
 - **Full-Screen Distraction-Free Reading**: Uses the entire `320×240` screen (`12` word-wrapped lines per page, zero horizontal scrolling, no automated scrolling) with a discrete **`Y: Help`** badge in the bottom-right corner.
 - **Whole-Page Vertical Scrolling**: **`DPAD DOWN` / `UP`** scrolls one full page at a time.
 - **Chapter Selector (`SELECT`)**: Lists all EPUB chapters (`toc.ncx` / EPUB 3 `<nav>`); navigate with **`DPAD UP` / `DOWN`** and press **`A`** to jump to a chapter.

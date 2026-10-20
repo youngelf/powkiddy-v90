@@ -7,8 +7,7 @@
  *   UP / DOWN                       : Increase / Decrease Tempo (BPM)
  *   LEFT / RIGHT                    : Cycle Time Signature (4/4, 3/4, 2/4, 5/4, 7/4)
  *   L1 / R1 (Tab / Backspace)       : Jump Tempo -5 / +5 BPM
- *   SELECT (Escape or 'Q')          : Save settings & Exit
- *   START  (Enter)                  : Hold SELECT+START to exit
+ *   START  (Enter or 'Q' on Host)   : Save settings & Exit
  */
 
 #include <stdio.h>
@@ -874,10 +873,17 @@ int main(int argc, char *argv[]) {
                     }
                     save_config();
                 }
-                /* SELECT or Q: Save & Exit */
-                else if (k == V90_BTN_SELECT || k == SDLK_q) {
+#if defined(HOST_X11)
+                /* START (Enter), Esc, or Q: Save & Exit on Linux Host */
+                else if (k == V90_BTN_START || k == V90_BTN_SELECT || k == SDLK_q) {
                     running = false;
                 }
+#else
+                /* START: Save & Exit on PowKiddy V90 */
+                else if (k == V90_BTN_START) {
+                    running = false;
+                }
+#endif
             } else if (ev.type == SDL_KEYUP) {
                 SDLKey k = ev.key.keysym.sym;
                 if (k == V90_BTN_SELECT) select_held = false;
@@ -1036,7 +1042,7 @@ int main(int argc, char *argv[]) {
         draw_rect(screen, 6, 220, 88, 14, a_col);
         draw_text_centered(screen, 50, 224, "[A] PLAY/PAUSE", 1, col_bg);
 
-        draw_text(screen, 100, 224, "[UP/DN]BPM [L/R]SIG [SEL]EXIT", 1, col_white);
+        draw_text(screen, 100, 224, "[UP/DN]BPM [L/R]SIG [START]EXIT", 1, col_white);
 
         SDL_Flip(screen);
         SDL_Delay(16); /* ~60 FPS for crisp visual beat synchronization */

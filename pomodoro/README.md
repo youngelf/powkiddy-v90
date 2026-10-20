@@ -67,7 +67,7 @@ sudo docker run --rm -v "$PWD":/src -w /src nfriedly/miyoo-toolchain:steward mak
 | **Stop / Pause Timer** | **B Button** | **B Button** | `B` or `Left Ctrl` |
 | **Adjust Duration** ($\pm 1$ min while stopped) | **D-Pad UP / DOWN** or **R1 / L1** | **D-Pad UP / DOWN** or **R1 / L1** | `Up` / `Down Arrow` or `Backspace` / `Tab` |
 | **Fast Adjust Duration** ($\pm 5$ min while stopped) | **R2 / L2** | **R2 / L2** | `Page Down` / `Page Up` |
-| **Save & Exit** | **SELECT** | **SELECT**, **MENU (`M`)**, or **START + SELECT** | `Esc`, `Q`, or close window |
+| **Save & Exit** | **START** | **SELECT**, **MENU (`M`)**, or **START + SELECT** | `Enter`, `Esc`, `Q`, or close window |
 
 ---
 

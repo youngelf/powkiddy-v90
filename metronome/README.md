@@ -16,12 +16,12 @@ A lightweight, precision C metronome designed for the **PowKiddy V90** handheld 
 
 | Action | PowKiddy V90 Button | Linux Desktop Key |
 | :--- | :--- | :--- |
-| **Play / Pause** | **A** | `A`, `Space`, `Enter`, or `Left Alt` |
+| **Play / Pause** | **A** | `A`, `Space`, or `Left Alt` |
 | **Increase / Decrease Tempo (±1 BPM)** | **UP** / **DOWN** | `Up Arrow` / `Down Arrow` |
 | **Cycle Time Signature (`4/4`, `3/4`, `2/4`, `5/4`, `7/4`)** | **LEFT** / **RIGHT** | `Left Arrow` / `Right Arrow` |
 | **Fast Tempo Step (±5 BPM)** | **R1** / **L1** | `Page Up` / `Page Down` or `]` / `[` |
 | **Reset to 120 BPM** | **Y** | `R` or `Left Shift` |
-| **Save & Quit** | **SELECT** or **START + SELECT** | `Q` or `ESC` |
+| **Save & Quit** | **START** | `Enter`, `Q`, or `ESC` |
 
 ---
 

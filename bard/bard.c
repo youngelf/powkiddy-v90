@@ -500,6 +500,8 @@ typedef struct {
 static zip_t        *g_epub_zip = NULL;
 static bool          g_is_plain_txt = false;
 static char          g_plain_txt_path[PATH_MAX];
+static char          g_current_book_path[PATH_MAX] = "";
+static char          g_state_file_path[PATH_MAX] = "";
 static char          g_book_title[128] = "";
 static char          g_book_author[128] = "";
 static char          g_spine_hrefs[MAX_MANIFEST][256];
@@ -1184,8 +1186,12 @@ static bool open_epub_book(const char *filepath) {
     g_spine_count = 0;
     g_book_total_pages = 1;
     g_is_plain_txt = false;
+    g_current_book_path[0] = '\0';
     g_book_title[0] = '\0';
     g_book_author[0] = '\0';
+
+    char resolved_book[PATH_MAX];
+    const char *canonical_path = realpath(filepath, resolved_book) ? resolved_book : filepath;
 
     /* Also support plain .txt files gracefully */
     const char *ext = strrchr(filepath, '.');
@@ -1193,7 +1199,8 @@ static bool open_epub_book(const char *filepath) {
         FILE *f = fopen(filepath, "rb");
         if (!f) return false;
         g_is_plain_txt = true;
-        snprintf(g_plain_txt_path, sizeof(g_plain_txt_path), "%s", filepath);
+        snprintf(g_plain_txt_path, sizeof(g_plain_txt_path), "%s", canonical_path);
+        snprintf(g_current_book_path, sizeof(g_current_book_path), "%s", canonical_path);
         const char *base = strrchr(filepath, '/');
         snprintf(g_book_title, sizeof(g_book_title), "%s", base ? (base + 1) : filepath);
         memset(&g_chapters[0], 0, sizeof(EpubChapter));
@@ -1485,6 +1492,7 @@ static bool open_epub_book(const char *filepath) {
     }
     g_book_total_pages = (total_book_pgs > 0) ? total_book_pgs : 1;
 
+    snprintf(g_current_book_path, sizeof(g_current_book_path), "%s", canonical_path);
     load_chapter(0);
     return true;
 }
@@ -1547,6 +1555,135 @@ static void scan_directory(const char *dir_path) {
     closedir(d);
 
     qsort(g_files, (size_t)g_file_count, sizeof(FileEntry), cmp_file_entry);
+}
+
+/* =========================================================================
+ * Persistent Bookmark / Resume State (/mnt/.bard_state.cfg or ~/.bard_state.cfg)
+ * ========================================================================= */
+static void resolve_state_file_path(void) {
+    const char *env_path = getenv("BARD_STATE_FILE");
+    if (env_path && env_path[0] != '\0') {
+        snprintf(g_state_file_path, sizeof(g_state_file_path), "%s", env_path);
+        return;
+    }
+    struct stat st;
+    if (stat("/mnt", &st) == 0 && S_ISDIR(st.st_mode) && access("/mnt", W_OK) == 0) {
+        snprintf(g_state_file_path, sizeof(g_state_file_path), "/mnt/.bard_state.cfg");
+    } else {
+        const char *home = getenv("HOME");
+        if (home && access(home, W_OK) == 0) {
+            snprintf(g_state_file_path, sizeof(g_state_file_path), "%s/.bard_state.cfg", home);
+        } else {
+            snprintf(g_state_file_path, sizeof(g_state_file_path), "./.bard_state.cfg");
+        }
+    }
+}
+
+static void save_reader_state(void) {
+    if (g_state_file_path[0] == '\0' || g_current_book_path[0] == '\0') return;
+    FILE *f = fopen(g_state_file_path, "w");
+    if (!f) return;
+    fprintf(f, "book_path=%s\n", g_current_book_path);
+    fprintf(f, "chapter=%d\n", g_cur_chapter);
+    fprintf(f, "page=%d\n", g_cur_page);
+    fprintf(f, "dark_theme=%d\n", g_dark_theme ? 1 : 0);
+    fflush(f);
+    fsync(fileno(f));
+    fclose(f);
+}
+
+static bool load_and_resume_reader_state(void) {
+    if (g_state_file_path[0] == '\0') return false;
+    FILE *f = fopen(g_state_file_path, "r");
+    if (!f) return false;
+
+    char saved_path[PATH_MAX] = "";
+    int saved_chapter = -1;
+    int saved_page = -1;
+    int saved_dark = 0;
+    bool has_chapter = false;
+    bool has_page = false;
+
+    char line[PATH_MAX + 64];
+    while (fgets(line, sizeof(line), f)) {
+        size_t len = strlen(line);
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+            line[--len] = '\0';
+        }
+        if (strncmp(line, "book_path=", 10) == 0) {
+            snprintf(saved_path, sizeof(saved_path), "%.*s", (int)(sizeof(saved_path) - 1), line + 10);
+        } else if (strncmp(line, "chapter=", 8) == 0) {
+            char *endp = NULL;
+            long v = strtol(line + 8, &endp, 10);
+            if (endp && endp != line + 8 && *endp == '\0') {
+                saved_chapter = (int)v;
+                has_chapter = true;
+            }
+        } else if (strncmp(line, "page=", 5) == 0) {
+            char *endp = NULL;
+            long v = strtol(line + 5, &endp, 10);
+            if (endp && endp != line + 5 && *endp == '\0') {
+                saved_page = (int)v;
+                has_page = true;
+            }
+        } else if (strncmp(line, "dark_theme=", 11) == 0) {
+            saved_dark = atoi(line + 11);
+        }
+    }
+    fclose(f);
+
+    g_dark_theme = (saved_dark != 0);
+
+    if (saved_path[0] == '\0') {
+        return false;
+    }
+
+    struct stat st;
+    if (stat(saved_path, &st) != 0 || !S_ISREG(st.st_mode)) {
+        /* Saved book path does not exist: caller will open the file selector */
+        return false;
+    }
+
+    /* Point the file browser to the book's parent directory and highlight the file */
+    char dir_buf[PATH_MAX];
+    extract_dirname(saved_path, dir_buf, sizeof(dir_buf));
+    if (dir_buf[0] != '\0' && stat(dir_buf, &st) == 0 && S_ISDIR(st.st_mode)) {
+        scan_directory(dir_buf);
+        const char *base = strrchr(saved_path, '/');
+        const char *fname = base ? (base + 1) : saved_path;
+        for (int i = 0; i < g_file_count; i++) {
+            if (!g_files[i].is_dir && strcmp(g_files[i].name, fname) == 0) {
+                g_file_sel = i;
+                if (g_file_sel >= BROWSER_ROWS) {
+                    g_file_scroll = g_file_sel - BROWSER_ROWS + 1;
+                }
+                break;
+            }
+        }
+    }
+
+    if (!open_epub_book(saved_path)) {
+        return false;
+    }
+
+    /* Validate saved location (chapter and page); if invalid or missing, open to first page */
+    if (has_chapter && has_page && saved_chapter >= 0 && saved_chapter < g_chapter_count) {
+        load_chapter(saved_chapter);
+        if (saved_page >= 0 && saved_page < g_total_pages) {
+            g_cur_page = saved_page;
+        } else {
+            /* Saved page does not exist: open the book to the first page */
+            load_chapter(0);
+            g_cur_page = 0;
+        }
+    } else {
+        /* Saved location does not exist: open the book to the first page */
+        load_chapter(0);
+        g_cur_page = 0;
+    }
+
+    g_state = STATE_READING;
+    return true;
 }
 
 /* =========================================================================
@@ -1833,9 +1970,11 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     SDL_WM_SetCaption("PowKiddy V90 EPUB Reader (Bard)", NULL);
+    resolve_state_file_path();
 
     /* Determine starting directory (/mnt/media on PowKiddy V90 SD card) */
     struct stat st;
+    bool opened_from_arg = false;
     if (argc > 1 && stat(argv[1], &st) == 0) {
         if (S_ISDIR(st.st_mode)) {
             scan_directory(argv[1]);
@@ -1845,6 +1984,7 @@ int main(int argc, char *argv[]) {
             scan_directory(dir_buf[0] ? dir_buf : ".");
             if (open_epub_book(argv[1])) {
                 g_state = STATE_READING;
+                opened_from_arg = true;
             }
         }
     } else if (stat("/mnt/media", &st) == 0 && S_ISDIR(st.st_mode)) {
@@ -1911,6 +2051,30 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
+    /* Resume from last saved book & position if not overridden by a CLI file argument */
+    if (!opened_from_arg && argc <= 1) {
+        if (!load_and_resume_reader_state()) {
+            g_state = STATE_FILE_BROWSER;
+        }
+    }
+
+    /* Optional headless test helper for verifying resume behavior */
+    const char *test_resume_out = getenv("BARD_TEST_RESUME_OUT");
+    if (test_resume_out && test_resume_out[0] != '\0') {
+        FILE *tf = fopen(test_resume_out, "w");
+        if (tf) {
+            fprintf(tf, "state=%d\nbook_path=%s\nchapter=%d\npage=%d\n",
+                    (int)g_state, g_current_book_path, g_cur_chapter, g_cur_page);
+            fclose(tf);
+        }
+        save_reader_state();
+        if (g_epub_zip) zip_close(g_epub_zip);
+        free_wrapped_lines();
+        xmlCleanupParser();
+        SDL_Quit();
+        return 0;
+    }
+
     bool running = true;
     while (running) {
         SDL_Event ev;
@@ -1945,6 +2109,7 @@ int main(int argc, char *argv[]) {
                                 scan_directory(target);
                             } else if (open_epub_book(target)) {
                                 g_state = STATE_READING;
+                                save_reader_state();
                             }
                         }
                     } else if (k == V90_BTN_B || k == SDLK_b || k == V90_BTN_R1) {
@@ -1959,17 +2124,21 @@ int main(int argc, char *argv[]) {
                     if (k == V90_BTN_DOWN || k == V90_BTN_R1 || k == SDLK_PAGEDOWN) {
                         if (g_cur_page + 1 < g_total_pages) {
                             g_cur_page++;
+                            save_reader_state();
                         } else if (g_cur_chapter + 1 < g_chapter_count) {
                             load_chapter(g_cur_chapter + 1);
+                            save_reader_state();
                         }
                     }
                     /* DPAD UP: Scroll one whole page backward */
                     else if (k == V90_BTN_UP || k == V90_BTN_L1 || k == SDLK_PAGEUP) {
                         if (g_cur_page > 0) {
                             g_cur_page--;
+                            save_reader_state();
                         } else if (g_cur_chapter > 0) {
                             load_chapter(g_cur_chapter - 1);
                             g_cur_page = g_total_pages - 1;
+                            save_reader_state();
                         }
                     }
                     /* SELECT (or Home/C on desktop): Open Chapter List */
@@ -1989,6 +2158,7 @@ int main(int argc, char *argv[]) {
                     /* B button (physical B / SDLK_LCTRL on V90, or B on Linux): Switch Light / Dark mode */
                     else if (k == V90_BTN_B || k == SDLK_b) {
                         g_dark_theme = !g_dark_theme;
+                        save_reader_state();
                     }
                     /* Y button (or Y/H/Space on desktop): Open Help Screen */
                     else if (k == V90_BTN_Y || k == SDLK_y || k == SDLK_h) {
@@ -2008,6 +2178,7 @@ int main(int argc, char *argv[]) {
                         g_state = STATE_FILE_BROWSER;
                     } else if (k == V90_BTN_B || k == SDLK_b) {
                         g_dark_theme = !g_dark_theme;
+                        save_reader_state();
                     } else if (k == V90_BTN_Y || k == SDLK_y || k == SDLK_h ||
                                k == V90_BTN_A || k == SDLK_a) {
                         g_state = STATE_READING;
@@ -2027,6 +2198,7 @@ int main(int argc, char *argv[]) {
                     else if (k == V90_BTN_A || k == SDLK_a) {
                         load_chapter(g_toc_sel);
                         g_state = STATE_READING;
+                        save_reader_state();
                     }
                     /* B or SELECT: Close Chapter List without changing chapter */
                     else if (k == V90_BTN_B || k == SDLK_b ||
@@ -2040,6 +2212,7 @@ int main(int argc, char *argv[]) {
         SDL_Delay(16);
     }
 
+    save_reader_state();
     if (g_epub_zip) zip_close(g_epub_zip);
     free_wrapped_lines();
     xmlCleanupParser();
