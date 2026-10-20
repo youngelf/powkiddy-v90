@@ -7,15 +7,15 @@
  *   2. Linux Desktop (x86_64, X11 640x480 2x scaled window + dynamic ALSA PCM audio)
  *
  * Controls (PowKiddy V90 / Linux Desktop):
- *   SELECT (Tab)         : Cycle Mode: SCALES & CAGED -> CHORDS & ARPEGGIOS -> FRET EXPLORER
- *   A (Space / Z)        : Audition Scale / Strum Chord Voicing / Pluck Explorer Note
- *   B (X / BackSpace)    : Scales: Toggle Chord-Tone Highlight | Chords: Toggle Arp Overlay | Explorer: Lock/Unlock Fret
- *   X (C)                : Cycle Dot Labels (Intervals -> Note Names -> Degrees) | Explorer: Clear Locked Notes
- *   Y (V / H)            : Toggle Help & Guitar Tuning Modal ([LEFT/RIGHT] changes Tuning!)
- *   L1 / R1 ([ / ] / -/=): Scales: Cycle CAGED Box (ALL NECK, POS 1..5) | Chords: Cycle 5 CAGED Voicings | Explorer: -/+3 Frets
- *   DPAD UP / DOWN       : Scales/Chords: Transpose Root Key (C .. B) | Explorer: Move String Cursor (e .. E)
- *   DPAD LEFT / RIGHT    : Scales: Cycle 14 Scales | Chords: Cycle 12 Chord Qualities | Explorer: Move Fret Cursor (0 .. 15)
- *   START (Enter/Q/Esc)  : Save configuration & Exit
+ *   SELECT (Esc / C)          : Cycle Mode: SCALES & CAGED -> CHORDS & ARPEGGIOS -> FRET EXPLORER
+ *   A (LAlt / A / Z)          : Audition Scale / Strum Chord Voicing / Pluck Explorer Note
+ *   B (LCtrl / B)             : Scales: Toggle Chord-Tone Highlight | Chords: Toggle Arp Overlay | Explorer: Lock/Unlock Fret
+ *   X (LShift / X)            : Cycle Dot Labels (Intervals -> Note Names -> Degrees)
+ *   Y (Space / Y / H)         : Toggle Help & Guitar Tuning Modal ([LEFT/RIGHT] changes Tuning!)
+ *   L1 / R1 (Tab/BS / [/])    : Scales: Cycle CAGED Box (ALL NECK, POS 1..5) | Chords: Cycle 5 CAGED Voicings | Explorer: -/+3 Frets
+ *   DPAD UP / DOWN            : Scales/Chords: Transpose Root Key (C .. B) | Explorer: Move String Cursor (e .. E)
+ *   DPAD LEFT / RIGHT         : Scales: Cycle 14 Scales | Chords: Cycle 12 Chord Qualities | Explorer: Move Fret Cursor (0 .. 15)
+ *   START (Enter / RAlt / Q)  : Save configuration & Exit
  */
 
 #include <stdio.h>
@@ -388,6 +388,23 @@ static void SDL_Quit(void) {
 #else /* PowKiddy V90 native SDL 1.2 */
 #include <SDL/SDL.h>
 #endif
+
+/* =========================================================================
+ * PowKiddy V90 Button Mappings (MiyooCFW 1.3.3)
+ * ========================================================================= */
+#define V90_BTN_UP      SDLK_UP
+#define V90_BTN_DOWN    SDLK_DOWN
+#define V90_BTN_LEFT    SDLK_LEFT
+#define V90_BTN_RIGHT   SDLK_RIGHT
+#define V90_BTN_A       SDLK_LALT       /* A (East)  : Audition Scale / Strum Chord / Pluck Note */
+#define V90_BTN_B       SDLK_LCTRL      /* B (South) : Toggle Skeleton / Arp / Lock Note */
+#define V90_BTN_X       SDLK_LSHIFT     /* X (North) : Cycle Dot Labels (Intervals / Notes / Degrees) */
+#define V90_BTN_Y       SDLK_SPACE      /* Y (West)  : Toggle Help & Guitar Tuning modal */
+#define V90_BTN_L1      SDLK_TAB        /* L1        : Prev CAGED Box / Chord Voicing */
+#define V90_BTN_R1      SDLK_BACKSPACE  /* R1        : Next CAGED Box / Chord Voicing */
+#define V90_BTN_SELECT  SDLK_ESCAPE     /* SELECT    : Cycle Mode (SCALES -> CHORDS -> EXPLORER) */
+#define V90_BTN_START   SDLK_RETURN     /* START     : Save & Exit */
+#define V90_BTN_MENU    SDLK_RCTRL      /* MENU      : Save & Exit */
 
 /* =========================================================================
  * 24-bit Framebuffer & Anti-Aliased Graphics Primitives
@@ -1933,72 +1950,60 @@ int main(int argc, char *argv[]) {
             } else if (ev.type == SDL_KEYDOWN) {
                 SDLKey k = ev.key.keysym.sym;
 
-                /* START: Save & Exit */
-                if (k == SDLK_RETURN || k == SDLK_q) {
+                /* START or MENU (or Q on desktop): Save & Exit */
+                if (k == V90_BTN_START || k == V90_BTN_MENU || k == SDLK_q) {
                     running = false;
                     break;
                 }
-                if (k == SDLK_ESCAPE) {
-                    if (g_show_help) {
-                        g_show_help = false;
-                    } else {
-                        running = false;
-                        break;
-                    }
-                    continue;
-                }
 
-                /* Y Button (V / H / LShift): Toggle Help & Guitar Tuning Modal */
-                if (k == SDLK_LSHIFT || k == SDLK_v || k == SDLK_h || k == SDLK_y) {
+                /* Y Button (V90_BTN_Y = SDLK_SPACE on V90, or Y / H on desktop): Toggle Help & Tuning Modal */
+                if (k == V90_BTN_Y || k == SDLK_y || k == SDLK_h) {
                     g_show_help = !g_show_help;
                     continue;
                 }
 
-                /* Inside Help Modal: LEFT/RIGHT changes Guitar Tuning */
+                /* Inside Help Modal: LEFT/RIGHT changes Guitar Tuning; A/B/SELECT/Y closes */
                 if (g_show_help) {
-                    if (k == SDLK_LEFT) {
+                    if (k == V90_BTN_LEFT) {
                         g_tuning_idx = (g_tuning_idx + NUM_TUNINGS - 1) % NUM_TUNINGS;
-                    } else if (k == SDLK_RIGHT) {
+                    } else if (k == V90_BTN_RIGHT) {
                         g_tuning_idx = (g_tuning_idx + 1) % NUM_TUNINGS;
-                    } else if (k == SDLK_LALT || k == SDLK_LCTRL || k == SDLK_SPACE || k == SDLK_z) {
+                    } else if (k == V90_BTN_A || k == V90_BTN_B || k == V90_BTN_SELECT ||
+                               k == SDLK_a || k == SDLK_b || k == SDLK_z) {
                         g_show_help = false;
                     }
                     continue;
                 }
 
-                /* SELECT (Tab / RCtrl): Cycle Mode (SCALES -> CHORDS -> EXPLORER) */
-                if (k == SDLK_TAB || k == SDLK_RCTRL) {
+                /* SELECT (V90_BTN_SELECT = SDLK_ESCAPE on V90, or C on desktop):
+                 * Cycle Mode (SCALES -> CHORDS -> EXPLORER)
+                 */
+                if (k == V90_BTN_SELECT || k == SDLK_c) {
                     g_mode = (AppMode)(((int)g_mode + 1) % 3);
                     audition_current_mode();
                     continue;
                 }
 
-#if defined(HOST_X11)
-                /* Desktop X Button (C): Cycle Dot Labels */
-                if (k == SDLK_c) {
+                /* X Button (V90_BTN_X = SDLK_LSHIFT on V90, or X on desktop):
+                 * Cycle Dot Labels (Intervals -> Notes -> Degrees/Fingers)
+                 */
+                if (k == V90_BTN_X || k == SDLK_x) {
                     g_label_mode = (DotLabelMode)(((int)g_label_mode + 1) % 3);
                     continue;
                 }
-                /* Desktop A Button (Space / Z / A / LAlt): Audition / Strum / Pluck */
-                if (k == SDLK_LALT || k == SDLK_SPACE || k == SDLK_z || k == SDLK_a) {
-                    audition_current_mode();
-                    continue;
-                }
-#else
-                /* PowKiddy V90 X Button (SDLK_SPACE) or C: Cycle Dot Labels */
-                if (k == SDLK_SPACE || k == SDLK_c) {
-                    g_label_mode = (DotLabelMode)(((int)g_label_mode + 1) % 3);
-                    continue;
-                }
-                /* PowKiddy V90 A Button (SDLK_LALT): Audition / Strum / Pluck */
-                if (k == SDLK_LALT || k == SDLK_z || k == SDLK_a) {
-                    audition_current_mode();
-                    continue;
-                }
-#endif
 
-                /* B Button (LCtrl / X / BackSpace) */
-                if (k == SDLK_LCTRL || k == SDLK_x || k == SDLK_b || k == SDLK_BACKSPACE) {
+                /* A Button (V90_BTN_A = SDLK_LALT on V90, or A / Z on desktop):
+                 * Audition Scale / Strum Chord Voicing / Pluck Explorer Note
+                 */
+                if (k == V90_BTN_A || k == SDLK_a || k == SDLK_z) {
+                    audition_current_mode();
+                    continue;
+                }
+
+                /* B Button (V90_BTN_B = SDLK_LCTRL on V90, or B on desktop):
+                 * Scales: Toggle Chord-Tone Skeleton | Chords: Toggle Arp Backdrop | Explorer: Lock/Unlock Fret
+                 */
+                if (k == V90_BTN_B || k == SDLK_b) {
                     if (g_mode == MODE_SCALES) {
                         g_chord_skeleton = !g_chord_skeleton;
                     } else if (g_mode == MODE_CHORDS) {
@@ -2018,8 +2023,11 @@ int main(int argc, char *argv[]) {
                     continue;
                 }
 
-                /* L1 / R1: Cycle CAGED Box / Chord Voicing / Explorer Fret Jump */
-                if (k == SDLK_PAGEUP || k == SDLK_LEFTBRACKET || k == SDLK_MINUS) {
+                /* Shoulder L1 / R1 (V90_BTN_L1 = SDLK_TAB, V90_BTN_R1 = SDLK_BACKSPACE on V90;
+                 * or [ / ] / - / = / PageUp / PageDown on desktop):
+                 * Cycle CAGED Box (ALL NECK, POS 1..5) / Chord Voicing (VOICING 1..5) / Explorer Fret Jump
+                 */
+                if (k == V90_BTN_L1 || k == SDLK_PAGEUP || k == SDLK_LEFTBRACKET || k == SDLK_MINUS) {
                     if (g_mode == MODE_SCALES) {
                         g_caged_pos = (g_caged_pos + 6 - 1) % 6;
                     } else if (g_mode == MODE_CHORDS) {
@@ -2031,7 +2039,7 @@ int main(int argc, char *argv[]) {
                     }
                     continue;
                 }
-                if (k == SDLK_PAGEDOWN || k == SDLK_RIGHTBRACKET || k == SDLK_EQUALS) {
+                if (k == V90_BTN_R1 || k == SDLK_PAGEDOWN || k == SDLK_RIGHTBRACKET || k == SDLK_EQUALS) {
                     if (g_mode == MODE_SCALES) {
                         g_caged_pos = (g_caged_pos + 1) % 6;
                     } else if (g_mode == MODE_CHORDS) {
@@ -2046,37 +2054,37 @@ int main(int argc, char *argv[]) {
 
                 /* DPAD Navigation */
                 if (g_mode == MODE_SCALES) {
-                    if (k == SDLK_UP) {
+                    if (k == V90_BTN_UP) {
                         g_root_pc = (g_root_pc + 1) % 12;
-                    } else if (k == SDLK_DOWN) {
+                    } else if (k == V90_BTN_DOWN) {
                         g_root_pc = (g_root_pc + 11) % 12;
-                    } else if (k == SDLK_LEFT) {
+                    } else if (k == V90_BTN_LEFT) {
                         g_scale_idx = (g_scale_idx + NUM_SCALES - 1) % NUM_SCALES;
-                    } else if (k == SDLK_RIGHT) {
+                    } else if (k == V90_BTN_RIGHT) {
                         g_scale_idx = (g_scale_idx + 1) % NUM_SCALES;
                     }
                 } else if (g_mode == MODE_CHORDS) {
-                    if (k == SDLK_UP) {
+                    if (k == V90_BTN_UP) {
                         g_root_pc = (g_root_pc + 1) % 12;
                         audition_current_mode();
-                    } else if (k == SDLK_DOWN) {
+                    } else if (k == V90_BTN_DOWN) {
                         g_root_pc = (g_root_pc + 11) % 12;
                         audition_current_mode();
-                    } else if (k == SDLK_LEFT) {
+                    } else if (k == V90_BTN_LEFT) {
                         g_chord_idx = (g_chord_idx + NUM_CHORDS - 1) % NUM_CHORDS;
                         audition_current_mode();
-                    } else if (k == SDLK_RIGHT) {
+                    } else if (k == V90_BTN_RIGHT) {
                         g_chord_idx = (g_chord_idx + 1) % NUM_CHORDS;
                         audition_current_mode();
                     }
                 } else {
-                    if (k == SDLK_UP) {
+                    if (k == V90_BTN_UP) {
                         g_exp_row = (g_exp_row + NUM_STRINGS - 1) % NUM_STRINGS;
-                    } else if (k == SDLK_DOWN) {
+                    } else if (k == V90_BTN_DOWN) {
                         g_exp_row = (g_exp_row + 1) % NUM_STRINGS;
-                    } else if (k == SDLK_LEFT) {
+                    } else if (k == V90_BTN_LEFT) {
                         g_exp_fret = (g_exp_fret + NUM_FRETS - 1) % NUM_FRETS;
-                    } else if (k == SDLK_RIGHT) {
+                    } else if (k == V90_BTN_RIGHT) {
                         g_exp_fret = (g_exp_fret + 1) % NUM_FRETS;
                     }
                 }

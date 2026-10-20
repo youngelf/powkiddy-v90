@@ -42,15 +42,15 @@ A full-neck 15-fret interactive guitar encyclopedia (`320×240` RGB565, 6-voice 
 
 | V90 Button | Linux Key | `SCALES & CAGED` Mode | `CHORDS & ARPEGGIOS` Mode | `FRET EXPLORER` Mode |
 | :--- | :--- | :--- | :--- | :--- |
-| **`SELECT`** | `Tab` | Switch Mode: `SCALES` $\rightarrow$ `CHORDS` $\rightarrow$ `EXPLORER` | Switch Mode: `CHORDS` $\rightarrow$ `EXPLORER` | Switch Mode: `EXPLORER` $\rightarrow$ `SCALES` |
-| **`A`** | `Space` / `Z` | **Play / Audition** active CAGED scale box | **Strum** 6-string chord voicing | **Pluck** cursor note (or strum locked chord) |
-| **`B`** | `X` / `BackSpace` | Toggle **Chord-Tone Skeleton** (`3/5/7`) | Toggle **Full-Neck Arpeggio** backdrop | **Lock / Unlock** finger on current string & fret |
-| **`X`** | `C` | **Cycle Dot Labels**: `Intervals` $\rightarrow$ `Notes` $\rightarrow$ `Degrees` | **Cycle Dot Labels**: `Intervals` $\rightarrow$ `Notes` $\rightarrow$ `Fingers` | **Cycle Dot Labels**: `Intervals` $\rightarrow$ `Notes` $\rightarrow$ `Degrees` |
-| **`Y`** | `V` / `H` | Toggle **Help & Guitar Tuning Modal** (`[L/R]` changes Tuning) | Toggle **Help & Guitar Tuning Modal** | Toggle **Help & Guitar Tuning Modal** |
-| **`L1 / R1`** | `[` / `]` (or `-` / `=`) | Cycle **CAGED Box** (`ALL NECK`, `POS 1..5`) | Cycle **5 CAGED Chord Voicings** (`VOICING 1..5`) | Jump cursor `-3` / `+3` frets |
+| **`SELECT`** | `Esc` / `C` | Switch Mode: `SCALES` $\rightarrow$ `CHORDS` $\rightarrow$ `EXPLORER` | Switch Mode: `CHORDS` $\rightarrow$ `EXPLORER` | Switch Mode: `EXPLORER` $\rightarrow$ `SCALES` |
+| **`A`** | `Left Alt` / `A` / `Z` | **Play / Audition** active CAGED scale box | **Strum** 6-string chord voicing | **Pluck** cursor note (or strum locked chord) |
+| **`B`** | `Left Ctrl` / `B` | Toggle **Chord-Tone Skeleton** (`3/5/7`) | Toggle **Full-Neck Arpeggio** backdrop | **Lock / Unlock** finger on current string & fret |
+| **`X`** | `Left Shift` / `X` | **Cycle Dot Labels**: `Intervals` $\rightarrow$ `Notes` $\rightarrow$ `Degrees` | **Cycle Dot Labels**: `Intervals` $\rightarrow$ `Notes` $\rightarrow$ `Fingers` | **Cycle Dot Labels**: `Intervals` $\rightarrow$ `Notes` $\rightarrow$ `Degrees` |
+| **`Y`** | `Space` / `Y` / `H` | Toggle **Help & Guitar Tuning Modal** (`[L/R]` changes Tuning) | Toggle **Help & Guitar Tuning Modal** | Toggle **Help & Guitar Tuning Modal** |
+| **`L1 / R1`** | `Tab` / `BackSpace` / `[` / `]` | Cycle **CAGED Box** (`ALL NECK`, `POS 1..5`) | Cycle **5 CAGED Chord Voicings** (`VOICING 1..5`) | Jump cursor `-3` / `+3` frets |
 | **`DPAD UP / DOWN`** | `Up` / `Down` | Transpose **Root Key** (`C` .. `B`) | Transpose **Root Key** (`C` .. `B`) | Move cursor **Up / Down Strings** (`e` .. `E`) |
 | **`DPAD LEFT / RIGHT`** | `Left` / `Right` | Cycle **14 Scales & Modes** | Cycle **12 Chord Qualities** | Move cursor **Left / Right Frets** (`0` .. `15`) |
-| **`START`** | `Enter` / `Q` / `Esc` | Save state & **Exit** | Save state & **Exit** | Save state & **Exit** |
+| **`START`** | `Enter` / `Q` | Save state & **Exit** | Save state & **Exit** | Save state & **Exit** |
 
 ---
 
