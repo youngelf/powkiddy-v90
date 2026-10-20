@@ -1,0 +1,5 @@
+title=PocketBand
+description=Pocket Drum Machine & Backing Track Looper
+exec=/mnt/apps/pocketband/pocketband
+icon=/mnt/apps/pocketband/icon.png
+clock=702

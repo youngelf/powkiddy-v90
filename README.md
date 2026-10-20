@@ -18,6 +18,7 @@ Every application in this repository compiles both for the **PowKiddy V90 (`arm-
 | [`bard/`](bard/) | **EPUB E-Book Reader** — Text-only `.epub` reader (`libzip` + `libxml2`) with chapter selector, light/dark themes, and whole-page scrolling | `/mnt/apps/bard/bard` | `bard/bard_linux` |
 | [`videoplayer/`](videoplayer/) | **Native `320×240` Video Player** — Full-screen distraction-free video & ALSA audio player (`libavformat`, `libavcodec`, `libswscale`, `libswresample`) | `/mnt/apps/videoplayer/videoplayer` & `/mnt/gmenu2x/sections/applications/mplayer` | `videoplayer/videoplayer_linux` |
 | [`chordwheel/`](chordwheel/) | **Circle of Fifths & Guitar Voicing Synth (`chordwheel`)** — Interactive Circle of Fifths, 6-string fretboard chord diagrams, and Karplus-Strong guitar synth | `/mnt/apps/chordwheel/chordwheel` | `chordwheel/chordwheel_linux` |
+| [`pocketband/`](pocketband/) | **Pocket Drum Machine, Bassline & Backing Track Jam Buddy (`pocketband`)** — `4/4` & `3/4` Blues/Rock/Jazz drum + bass + chord backing band with 12-fret guitar soloing scale map | `/mnt/apps/pocketband/pocketband` | `pocketband/pocketband_linux` |
 | [`eartrainer/`](eartrainer/) | **Guitar Interval & Chord Ear Trainer (`eartrainer`)** — 12 intervals & 12 chord qualities with 6-string fretboard visualizer, 3-guess flow, and Karplus-Strong guitar synth | `/mnt/apps/eartrainer/eartrainer` | `eartrainer/eartrainer_linux` |
 | [`gmu/`](gmu/) | **Gmu Music Player (Keymap Fix & Port)** — Fixes swapped `A`/`B` & `X`/`Y` buttons on V90 and adds modern GCC desktop build support | `/mnt/apps/gmu/` | `gmu/gmu.bin` |
 | [`patch_bootlogo/`](patch_bootlogo/) | **Boot Splash Patcher** — Replaces the embedded PNG inside `/mnt/boot-logo` on a `powkiddy-q90-v90-cfw-v1.3.3.img` image | `/mnt/boot-logo` inside `.img` | `patch_bootlogo/patch_boot_logo` |
@@ -136,3 +137,18 @@ See [`eartrainer/README.md`](eartrainer/README.md) for full controls, build inst
 | Interval Guessing (3 Tries) | Interval Answer & Fretboard Shape | Chord Quality Mode (`CHORDS`) | Lifetime Accuracy & Help (`Y`) |
 | :---: | :---: | :---: | :---: |
 | ![Interval Guessing](eartrainer/promo/eartrainer_intervals.png) | ![Interval Revealed](eartrainer/promo/eartrainer_revealed.png) | ![Chord Mode](eartrainer/promo/eartrainer_chords.png) | ![Help & Stats](eartrainer/promo/eartrainer_help.png) |
+
+---
+
+## 10. [Pocket Drum Machine, Bassline & Backing Track Jam Buddy (`pocketband`)](pocketband/)
+
+A real-time drum machine, bassline sequencer, and chord-progression backing band ([`pocketband/pocketband.c`](pocketband/pocketband.c)) designed for guitarists:
+- **Default Guitarist Jam View (`VIEW_JAM`)**: Launches immediately with the backing band playing, showing the current chord (`A7`, `Dm7`, etc.), next chord, 4-bar progression strip, live `1 & 2 & 3 & [4 &]` step LEDs, and a **12-fret 6-string guitar soloing scale map** highlighting key roots, active chord roots, and blue/color notes.
+- **`4/4` & `3/4` Blues, Rock & Jazz Styles with Built-In Basslines**: Includes `Blues Shuffle 4/4`, `Slow Blues 3/4`, `Classic Rock 4/4`, `Rock Ballad 3/4`, `Jazz Swing 4/4`, and `Jazz Waltz 3/4`, with beat-and-`&` drum grids and transposing basslines (`R`, `3`, `5`, `6`, `b7`, `8`).
+- **3-Way Backing Mix (`X`) & Step Editor (`SELECT`)**: Press **`X`** to cycle between `Full Band (Drums + Bass + Chord Stabs)`, `Drums + Bass`, and `Drums Only`, or press **`SELECT`** to customize drum hits and bassline notes.
+
+See [`pocketband/README.md`](pocketband/README.md) for controls, build instructions, and SD card deployment steps.
+
+| Guitarist Jam View (`Blues Shuffle 4/4`) | Step & Bassline Editor (`Classic Rock 4/4`) | `3/4` Waltz Jam View (`Jazz Waltz 3/4`) | Help & Groove Modal (`Y`) |
+| :---: | :---: | :---: | :---: |
+| ![Jam View](pocketband/promo/pocketband_jam.png) | ![Step Editor](pocketband/promo/pocketband_steps.png) | ![Jazz Waltz View](pocketband/promo/pocketband_waltz.png) | ![Help Modal](pocketband/promo/pocketband_help.png) |
