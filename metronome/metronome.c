@@ -6,7 +6,7 @@
  *   A Button (Left Alt or 'A')      : Play / Pause metronome
  *   UP / DOWN                       : Increase / Decrease Tempo (BPM)
  *   LEFT / RIGHT                    : Cycle Time Signature (4/4, 3/4, 2/4, 5/4, 7/4)
- *   L1 / R1 (Tab / Backspace)       : Jump Tempo -5 / +5 BPM
+ *   L1 / R1 (Tab / Backspace, [/])  : Decrease / Increase Click Drop-Rate by 5% (0%..100%)
  *   START  (Enter or 'Q' on Host)   : Save settings & Exit
  */
 
@@ -16,6 +16,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -69,6 +70,8 @@ typedef int SDLKey;
 #define SDLK_x          XK_x
 #define SDLK_y          XK_y
 #define SDLK_q          XK_q
+#define SDLK_LEFTBRACKET  XK_bracketleft
+#define SDLK_RIGHTBRACKET XK_bracketright
 
 #define SDL_QUIT            1
 #define SDL_KEYDOWN         2
@@ -526,7 +529,10 @@ static const uint8_t font5x7[95][5] = {
 /* Metronome State */
 static volatile int g_bpm = DEFAULT_BPM;
 static volatile int g_time_sig_idx = 0; /* Index into k_time_sig_beats */
+static volatile int g_drop_pct = 0;     /* Click drop-rate (0% .. 100%, step 5%), starts at 0% */
 static volatile bool g_playing = false;
+
+#define LOCK_IN_MEASURES 4
 
 /* Click synthesizer state */
 static volatile int g_click_samples_left = 0;
@@ -567,6 +573,23 @@ static void trigger_click(bool accent) {
     g_click_sample_pos = 0;
     int duration_ms = accent ? ACCENT_CLICK_MS : NORMAL_CLICK_MS;
     g_click_samples_left = (SAMPLE_RATE * duration_ms) / 1000;
+}
+
+/* Play click unless dropped:
+ * - First 4 measures (measure_count < 4) always play 100% of clicks to lock in the beat.
+ * - Thereafter, drop clicks with probability g_drop_pct% (UI updates normally, sound omitted).
+ */
+static void maybe_trigger_click(bool accent, int measure_count, int drop_pct) {
+    if (measure_count < LOCK_IN_MEASURES || drop_pct <= 0) {
+        trigger_click(accent);
+        return;
+    }
+    if (drop_pct >= 100) {
+        return;
+    }
+    if ((rand() % 100) >= drop_pct) {
+        trigger_click(accent);
+    }
 }
 
 static void audio_callback(void *userdata, Uint8 *stream, int len) {
@@ -735,8 +758,10 @@ int main(int argc, char *argv[]) {
     (void)argv;
 
     putenv((char *)"SDL_NOMOUSE=1");
+    srand((unsigned int)time(NULL) ^ (unsigned int)getpid());
     resolve_config_path();
     load_config();
+    g_drop_pct = 0; /* Always start at 0% drop-rate so all clicks are played */
 
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_JOYSTICK) < 0) {
         fprintf(stderr, "Failed to initialize video: %s\n", SDL_GetError());
@@ -791,7 +816,8 @@ int main(int argc, char *argv[]) {
     Uint32 col_gold        = SDL_MapRGB(screen->format, 241, 196, 15);  /* Gold */
     Uint32 col_box_idle    = SDL_MapRGB(screen->format, 34, 42, 58);
 
-    int current_beat = 0; /* 0 .. beats_per_bar - 1 */
+    int current_beat = 0;  /* 0 .. beats_per_bar - 1 */
+    int measure_count = 0; /* Measures elapsed since start (0..3 = 4-measure lock-in) */
     Uint32 last_tick_ms = SDL_GetTicks();
     double beat_accum_ms = 0.0;
     Uint32 beat_flash_ms = 0;
@@ -819,12 +845,13 @@ int main(int argc, char *argv[]) {
                 if (k == V90_BTN_A || k == SDLK_a || k == SDLK_SPACE) {
                     g_playing = !g_playing;
                     if (g_playing) {
-                        /* Immediately fire Beat 1 (accented) when starting */
+                        /* Immediately fire Beat 1 (accented) of Measure 1 when starting */
                         current_beat = 0;
+                        measure_count = 0;
                         beat_accum_ms = 0.0;
                         last_tick_ms = now_ms;
                         beat_flash_ms = now_ms;
-                        trigger_click(true);
+                        maybe_trigger_click(true, measure_count, g_drop_pct);
                     }
                 }
                 /* UP / DOWN: Tempo (BPM) control */
@@ -841,35 +868,43 @@ int main(int argc, char *argv[]) {
                     last_repeat_ms = now_ms;
                     save_config();
                 }
-                /* L1 / R1: Fast BPM step (-5 / +5) */
-                else if (k == V90_BTN_L1) {
-                    g_bpm -= 5;
-                    if (g_bpm < MIN_BPM) g_bpm = MIN_BPM;
-                    save_config();
-                } else if (k == V90_BTN_R1) {
-                    g_bpm += 5;
-                    if (g_bpm > MAX_BPM) g_bpm = MAX_BPM;
-                    save_config();
+                /* L1 / R1: Reduce / Increase click drop-rate by 5% (0% .. 100%) */
+                else if (k == V90_BTN_L1 || k == V90_BTN_R2
+#if defined(HOST_X11)
+                         || k == SDLK_LEFTBRACKET
+#endif
+                ) {
+                    g_drop_pct -= 5;
+                    if (g_drop_pct < 0) g_drop_pct = 0;
+                } else if (k == V90_BTN_R1 || k == V90_BTN_L2
+#if defined(HOST_X11)
+                           || k == SDLK_RIGHTBRACKET
+#endif
+                ) {
+                    g_drop_pct += 5;
+                    if (g_drop_pct > 100) g_drop_pct = 100;
                 }
                 /* LEFT / RIGHT: Cycle between 4/4, 3/4, 2/4, 5/4, 7/4 */
                 else if (k == V90_BTN_RIGHT) {
                     g_time_sig_idx = (g_time_sig_idx + 1) % NUM_TIME_SIGS;
                     current_beat = 0;
+                    measure_count = 0;
                     beat_accum_ms = 0.0;
                     if (g_playing) {
                         last_tick_ms = now_ms;
                         beat_flash_ms = now_ms;
-                        trigger_click(true);
+                        maybe_trigger_click(true, measure_count, g_drop_pct);
                     }
                     save_config();
                 } else if (k == V90_BTN_LEFT) {
                     g_time_sig_idx = (g_time_sig_idx + NUM_TIME_SIGS - 1) % NUM_TIME_SIGS;
                     current_beat = 0;
+                    measure_count = 0;
                     beat_accum_ms = 0.0;
                     if (g_playing) {
                         last_tick_ms = now_ms;
                         beat_flash_ms = now_ms;
-                        trigger_click(true);
+                        maybe_trigger_click(true, measure_count, g_drop_pct);
                     }
                     save_config();
                 }
@@ -895,10 +930,11 @@ int main(int argc, char *argv[]) {
                     g_playing = !g_playing;
                     if (g_playing) {
                         current_beat = 0;
+                        measure_count = 0;
                         beat_accum_ms = 0.0;
                         last_tick_ms = now_ms;
                         beat_flash_ms = now_ms;
-                        trigger_click(true);
+                        maybe_trigger_click(true, measure_count, g_drop_pct);
                     }
                 }
             }
@@ -931,8 +967,11 @@ int main(int argc, char *argv[]) {
             while (beat_accum_ms >= interval_ms) {
                 beat_accum_ms -= interval_ms;
                 current_beat = (current_beat + 1) % beats_per_bar;
+                if (current_beat == 0) {
+                    measure_count++;
+                }
                 beat_flash_ms = now_ms;
-                trigger_click(current_beat == 0);
+                maybe_trigger_click(current_beat == 0, measure_count, g_drop_pct);
             }
         } else {
             last_tick_ms = now_ms;
@@ -991,8 +1030,8 @@ int main(int argc, char *argv[]) {
         if (box_w > 48) box_w = 48;
         int total_boxes_w = box_w * beats_per_bar + gap * (beats_per_bar - 1);
         int start_x = 160 - total_boxes_w / 2;
-        int box_y = 145;
-        int box_h = 42;
+        int box_y = 141;
+        int box_h = 36;
 
         for (int b = 0; b < beats_per_bar; b++) {
             int bx = start_x + b * (box_w + gap);
@@ -1011,16 +1050,22 @@ int main(int argc, char *argv[]) {
             char num_str[16];
             snprintf(num_str, sizeof(num_str), "%d", b + 1);
             Uint32 num_col = is_active ? col_bg : ((b == 0) ? col_accent : col_white);
-            draw_text_centered(screen, bx + box_w / 2, box_y + 10, num_str, 2, num_col);
+            draw_text_centered(screen, bx + box_w / 2, box_y + 6, num_str, 2, num_col);
 
             if (b == 0) {
-                draw_text_centered(screen, bx + box_w / 2, box_y + 29, "ACC", 1,
+                draw_text_centered(screen, bx + box_w / 2, box_y + 24, "ACC", 1,
                                    is_active ? col_bg : col_accent);
             }
         }
 
-        /* Pendulum / Phase Progress Bar inside Beat Panel (y: 194..202) */
-        int pbar_x = 24, pbar_y = 194, pbar_w = 272, pbar_h = 6;
+        /* Single drop% indicator below the beat markings */
+        char drop_str[32];
+        snprintf(drop_str, sizeof(drop_str), "DROP: %d%%", g_drop_pct);
+        draw_text_centered(screen, 160, 182, drop_str, 1,
+                           (g_drop_pct > 0) ? col_gold : col_muted);
+
+        /* Pendulum / Phase Progress Bar inside Beat Panel (y: 195..201) */
+        int pbar_x = 24, pbar_y = 195, pbar_w = 272, pbar_h = 5;
         draw_rect(screen, pbar_x, pbar_y, pbar_w, pbar_h, col_bg);
         if (g_playing && interval_ms > 0.0) {
             double phase = beat_accum_ms / interval_ms;

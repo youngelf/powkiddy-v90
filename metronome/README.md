@@ -6,8 +6,12 @@ A lightweight, precision C metronome designed for the **PowKiddy V90** handheld 
 - **Tempo Control**: Adjustable from **20 BPM to 300 BPM** with classical tempo markings (*Grave*, *Largo*, *Adagio*, *Andante*, *Moderato*, *Allegro*, *Vivace*, *Presto*, *Prestissimo*).
 - **5 Time Signatures**: Cycle between **`4/4`**, **`3/4`**, **`2/4`**, **`5/4`**, and **`7/4`** time.
 - **Beat 1 Accent**:
-  - **Audio**: Synthesized high-pitched accent click (**1320 Hz / E6**) on Beat 1 and standard click (**880 Hz / A5**) on subsequent beats.
+  - **Audio**: Synthesized high-pitched accent click (**1760 Hz / A6**) on Beat 1 and standard click (**1000 Hz**) on subsequent beats.
   - **Visual**: Dynamic beat boxes that flash bright red (`ACC`) on Beat 1 and bright green on beats 2..N, paired with a smooth swinging pendulum indicator.
+- **Click Drop-Rate (`DROP: 0%` .. `100%`) with 4-Measure Lock-In**:
+  - Use **L1** / **R1** to decrease or increase the click drop-rate in **5%** steps (default **`0%`**, so every click is played on startup).
+  - Even when `DROP%` is non-zero, **100% of clicks are played for the first 4 measures** of any time signature so you can lock into the groove before random click dropping begins on measure 5+.
+  - When a click is dropped, the visual beat box and pendulum continue advancing normally while the audio click is muted to train internal timekeeping.
 - **Persistent Settings**: Automatically saves your BPM and selected time signature (`/mnt/.metronome.cfg` on PowKiddy V90, `~/.metronome.cfg` on Linux).
 
 ---
@@ -19,8 +23,7 @@ A lightweight, precision C metronome designed for the **PowKiddy V90** handheld 
 | **Play / Pause** | **A** | `A`, `Space`, or `Left Alt` |
 | **Increase / Decrease Tempo (±1 BPM)** | **UP** / **DOWN** | `Up Arrow` / `Down Arrow` |
 | **Cycle Time Signature (`4/4`, `3/4`, `2/4`, `5/4`, `7/4`)** | **LEFT** / **RIGHT** | `Left Arrow` / `Right Arrow` |
-| **Fast Tempo Step (±5 BPM)** | **R1** / **L1** | `Page Up` / `Page Down` or `]` / `[` |
-| **Reset to 120 BPM** | **Y** | `R` or `Left Shift` |
+| **Decrease / Increase Click Drop-Rate (±5%)** | **L1** / **R1** | `Tab` / `Backspace`, `[` / `]`, or `Page Down` / `Page Up` |
 | **Save & Quit** | **START** | `Enter`, `Q`, or `ESC` |
 
 ---
