@@ -23,6 +23,7 @@
 #include <string.h>
 #include <math.h>
 #include <unistd.h>
+#include <pthread.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -801,6 +802,7 @@ static void build_guitar_voicing(int root_pc, ChordQuality qual, int voicing_idx
 
 /* =========================================================================
  * 6-String Fixed-Point Karplus-Strong Plucked Guitar Synthesizer
+ * (Background Synthesis Thread with Instant Preemption on Chord Change)
  * ========================================================================= */
 #define KS_MAX_DELAY 600
 
@@ -814,8 +816,29 @@ typedef struct {
     bool    active;
 } KsString;
 
-static KsString g_ks_strings[6];
-static volatile bool g_synth_lock = false;
+static KsString        g_ks_strings[6];
+static volatile bool   g_synth_lock         = false;
+static volatile uint32_t g_synth_gen        = 0; /* Incremented on every chord change to kill active synth */
+static volatile uint32_t g_active_audio_gen = 0; /* Generation currently loaded in g_ks_strings */
+
+static pthread_t       g_synth_thread;
+static pthread_mutex_t g_synth_mutex        = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t  g_synth_cond         = PTHREAD_COND_INITIALIZER;
+static volatile bool   g_synth_running      = false;
+static volatile bool   g_synth_has_req      = false;
+static GuitarVoicing   g_synth_req_voicing;
+
+/* Precomputed 1024-entry sine LUT (Q14: -16384 .. +16384) for fast background excitation */
+static int16_t         g_sin_lut[1024];
+static bool            g_sin_lut_ready      = false;
+
+static void init_sin_lut(void) {
+    if (g_sin_lut_ready) return;
+    for (int i = 0; i < 1024; i++) {
+        g_sin_lut[i] = (int16_t)(sin((2.0 * M_PI * (double)i) / 1024.0) * 16384.0);
+    }
+    g_sin_lut_ready = true;
+}
 
 static void maximize_hardware_volume(void) {
 #if !defined(HOST_X11)
@@ -830,59 +853,135 @@ static void maximize_hardware_volume(void) {
 #endif
 }
 
-static void trigger_guitar_strum(const GuitarVoicing *v) {
-    g_synth_lock = true;
-    uint32_t rng = 0x9E3779B9u ^ SDL_GetTicks();
-    int active_order = 0;
+/* Background thread that synthesizes Karplus-Strong string buffers off the UI thread.
+ * If g_synth_gen changes mid-synthesis, it immediately aborts the old chord and
+ * starts synthesizing the newest requested chord.
+ */
+static void *synth_worker_thread_fn(void *arg) {
+    (void)arg;
+    KsString local_strings[6];
 
-    for (int s = 0; s < 6; s++) {
-        KsString *ks = &g_ks_strings[s];
-        if (v->frets[s] < 0) {
-            ks->active = false;
-            ks->active_samples_left = 0;
+    while (1) {
+        pthread_mutex_lock(&g_synth_mutex);
+        while (!g_synth_has_req && g_synth_running) {
+            pthread_cond_wait(&g_synth_cond, &g_synth_mutex);
+        }
+        if (!g_synth_running) {
+            pthread_mutex_unlock(&g_synth_mutex);
+            break;
+        }
+        GuitarVoicing v = g_synth_req_voicing;
+        uint32_t my_gen = g_synth_gen;
+        g_synth_has_req = false;
+        pthread_mutex_unlock(&g_synth_mutex);
+
+        uint32_t rng = 0x9E3779B9u ^ (my_gen * 0x85EBCA6Bu) ^ SDL_GetTicks();
+        int active_order = 0;
+        bool aborted = false;
+
+        for (int s = 0; s < 6; s++) {
+            /* If a newer chord was requested while synthesizing, kill this synthesis immediately */
+            if (g_synth_gen != my_gen || !g_synth_running) {
+                aborted = true;
+                break;
+            }
+
+            KsString *ks = &local_strings[s];
+            if (v.frets[s] < 0) {
+                ks->active = false;
+                ks->active_samples_left = 0;
+                ks->length = 24;
+                ks->pos = 0;
+                ks->start_delay_samples = 0;
+                ks->prev_val = 0;
+                continue;
+            }
+
+            int midi_note = k_string_midi[s] + v.frets[s];
+            double freq = 440.0 * pow(2.0, (double)(midi_note - 69) / 12.0);
+            int period = (int)(SAMPLE_RATE / freq + 0.5);
+            if (period < 24) period = 24;
+            if (period >= KS_MAX_DELAY) period = KS_MAX_DELAY - 1;
+
+            ks->length = period;
+            ks->pos = 0;
+            ks->prev_val = 0;
+            /* 22 ms stagger between consecutive strings for a natural guitar downstroke */
+            ks->start_delay_samples = active_order * ((SAMPLE_RATE * 22) / 1000);
+            ks->active_samples_left = SAMPLE_RATE * 2; /* 2.0s ring-out */
+            active_order++;
+
+            /* Excite delay line with pick-filtered warm noise burst using fast LUT */
+            int16_t raw[KS_MAX_DELAY];
+            for (int i = 0; i < period; i++) {
+                rng = rng * 1664525u + 1013904223u;
+                int16_t r = (int16_t)((int32_t)(rng >> 16) - 32768);
+                int idx1 = ((i * 1024) / period) & 1023;
+                int idx2 = (idx1 * 2) & 1023;
+                int32_t warm = ((int32_t)g_sin_lut[idx1] * 14000 + (int32_t)g_sin_lut[idx2] * 6000) >> 14;
+                int32_t mixed = (r / 3) + warm;
+                if (mixed > 28000) mixed = 28000;
+                if (mixed < -28000) mixed = -28000;
+                raw[i] = (int16_t)mixed;
+            }
+            /* Two-pass smoothing filter so higher strings sound warm & acoustic */
+            for (int pass = 0; pass < 2; pass++) {
+                int16_t prev = raw[period - 1];
+                for (int i = 0; i < period; i++) {
+                    int16_t cur = raw[i];
+                    raw[i] = (int16_t)(((int32_t)cur + (int32_t)prev) >> 1);
+                    prev = cur;
+                }
+            }
+            memcpy(ks->buf, raw, (size_t)period * sizeof(int16_t));
+            ks->active = true;
+        }
+
+        if (aborted || g_synth_gen != my_gen || !g_synth_running) {
             continue;
         }
 
-        int midi_note = k_string_midi[s] + v->frets[s];
-        double freq = 440.0 * pow(2.0, (double)(midi_note - 69) / 12.0);
-        int period = (int)(SAMPLE_RATE / freq + 0.5);
-        if (period < 24) period = 24;
-        if (period >= KS_MAX_DELAY) period = KS_MAX_DELAY - 1;
-
-        ks->length = period;
-        ks->pos = 0;
-        ks->prev_val = 0;
-        /* 22 ms stagger between consecutive strings for a natural guitar downstroke */
-        ks->start_delay_samples = active_order * ((SAMPLE_RATE * 22) / 1000);
-        ks->active_samples_left = SAMPLE_RATE * 2; /* 2.0s ring-out */
-        active_order++;
-
-        /* Excite delay line with pick-filtered warm noise burst */
-        int16_t raw[KS_MAX_DELAY];
-        for (int i = 0; i < period; i++) {
-            rng = rng * 1664525u + 1013904223u;
-            int16_t r = (int16_t)((int32_t)(rng >> 16) - 32768);
-            /* Fundamental warmth boost */
-            double phase = (2.0 * M_PI * (double)i) / (double)period;
-            int32_t warm = (int32_t)(sin(phase) * 14000.0 + sin(phase * 2.0) * 6000.0);
-            int32_t mixed = (r / 3) + warm;
-            if (mixed > 28000) mixed = 28000;
-            if (mixed < -28000) mixed = -28000;
-            raw[i] = (int16_t)mixed;
-        }
-        /* Two-pass smoothing filter so higher strings sound warm & acoustic */
-        for (int pass = 0; pass < 2; pass++) {
-            int16_t prev = raw[period - 1];
-            for (int i = 0; i < period; i++) {
-                int16_t cur = raw[i];
-                raw[i] = (int16_t)(((int32_t)cur + (int32_t)prev) >> 1);
-                prev = cur;
-            }
-        }
-        memcpy(ks->buf, raw, (size_t)period * sizeof(int16_t));
-        ks->active = true;
+        /* Publish newly synthesized chord to audio playback */
+        g_synth_lock = true;
+        memcpy(g_ks_strings, local_strings, sizeof(g_ks_strings));
+        g_active_audio_gen = my_gen;
+        g_synth_lock = false;
     }
-    g_synth_lock = false;
+    return NULL;
+}
+
+static void start_synth_worker(void) {
+    init_sin_lut();
+    pthread_mutex_lock(&g_synth_mutex);
+    g_synth_running = true;
+    g_synth_has_req = false;
+    pthread_mutex_unlock(&g_synth_mutex);
+    pthread_create(&g_synth_thread, NULL, synth_worker_thread_fn, NULL);
+}
+
+static void stop_synth_worker(void) {
+    pthread_mutex_lock(&g_synth_mutex);
+    if (!g_synth_running) {
+        pthread_mutex_unlock(&g_synth_mutex);
+        return;
+    }
+    g_synth_running = false;
+    g_synth_gen++;
+    pthread_cond_signal(&g_synth_cond);
+    pthread_mutex_unlock(&g_synth_mutex);
+    pthread_join(g_synth_thread, NULL);
+}
+
+/* Non-blocking chord strum trigger called from the UI thread:
+ * Immediately kills any previous chord playback/synthesis and wakes the background synth thread.
+ */
+static void trigger_guitar_strum(const GuitarVoicing *v) {
+    pthread_mutex_lock(&g_synth_mutex);
+    g_synth_gen++;
+    g_synth_req_voicing = *v;
+    g_synth_has_req     = true;
+    pthread_cond_signal(&g_synth_cond);
+    pthread_mutex_unlock(&g_synth_mutex);
 }
 
 static void audio_callback(void *userdata, Uint8 *stream, int len) {
@@ -890,7 +989,8 @@ static void audio_callback(void *userdata, Uint8 *stream, int len) {
     int16_t *out = (int16_t *)stream;
     int frames = len / (2 * AUDIO_CHANNELS);
 
-    if (g_synth_lock) {
+    /* If a new chord is being synthesized (or lock is held), immediately silence the old chord */
+    if (g_synth_lock || g_active_audio_gen != g_synth_gen) {
         memset(stream, 0, (size_t)len);
         return;
     }
@@ -1196,7 +1296,88 @@ static void load_config(void) {
 #define R_INNER_MIN 31.5f
 #define R_HUB_MAX   30.0f
 
+/* Precomputed 2x2 subpixel lookup table for the Circle of Fifths wheel
+ * so rendering on the FPU-less ARM926EJ-S uses pure integer table lookups:
+ *   bits 0..3 : sector (0..11)
+ *   bits 4..6 : zone:
+ *     0 = background outside wheel
+ *     1 = separator gap / ring gap
+ *     2 = outer ring interior
+ *     3 = outer ring radial/ring border (highlighted when selected, sep_col when on thin radial gap)
+ *     4 = outer ring ring-only border (highlighted when selected, else outer_fill)
+ *     5 = inner ring interior
+ *     6 = inner ring radial/ring border (highlighted when selected, sep_col when on thin radial gap)
+ *     7 = inner ring ring-only border (highlighted when selected, else inner_fill)
+ *   bit 7     : hub flag (if zone==0: 1=hub interior, if zone==1: 1=hub border)
+ */
+static uint8_t g_wheel_lut[SCREEN_H][174][4];
+static bool    g_wheel_lut_ready = false;
+
+static void init_wheel_lut(void) {
+    if (g_wheel_lut_ready) return;
+    memset(g_wheel_lut, 0, sizeof(g_wheel_lut));
+
+    int x0 = (int)(WHEEL_CX - R_OUTER_MAX - 2);
+    int x1 = (int)(WHEEL_CX + R_OUTER_MAX + 2);
+    int y0 = (int)(WHEEL_CY - R_OUTER_MAX - 2);
+    int y1 = (int)(WHEEL_CY + R_OUTER_MAX + 2);
+
+    for (int py = y0; py <= y1; py++) {
+        if (py < 0 || py >= SCREEN_H) continue;
+        for (int px = x0; px <= x1; px++) {
+            if (px < 0 || px >= 174) continue;
+            for (int sy = 0; sy < 2; sy++) {
+                for (int sx = 0; sx < 2; sx++) {
+                    int sub = sy * 2 + sx;
+                    float fx = (float)px + (sx ? 0.75f : 0.25f) - WHEEL_CX;
+                    float fy = (float)py + (sy ? 0.75f : 0.25f) - WHEEL_CY;
+                    float r = sqrtf(fx * fx + fy * fy);
+
+                    uint8_t code = 0; /* 0 = bg_col */
+                    if (r <= R_OUTER_MAX) {
+                        float deg = atan2f(fy, fx) * (180.0f / (float)M_PI) + 90.0f + 15.0f;
+                        while (deg < 0.0f)   deg += 360.0f;
+                        while (deg >= 360.0f) deg -= 360.0f;
+                        int sec = ((int)(deg / 30.0f)) % 12;
+                        float sec_pos = fmodf(deg, 30.0f);
+
+                        if (r >= R_OUTER_MIN && r <= R_OUTER_MAX) {
+                            bool on_radial_edge = (sec_pos < 1.3f || sec_pos > 28.7f);
+                            bool on_ring_edge   = (r < R_OUTER_MIN + 1.4f || r > R_OUTER_MAX - 1.4f);
+                            bool on_sep         = (sec_pos < 0.8f || sec_pos > 29.2f);
+                            int z = 2;
+                            if (on_sep) z = 3; /* sel ? sel_bdr : sep_col */
+                            else if (on_radial_edge || on_ring_edge) z = 4; /* sel ? sel_bdr : outer_fill */
+                            code = (uint8_t)((z << 4) | (sec & 0x0F));
+                        } else if (r >= R_INNER_MIN && r <= R_INNER_MAX) {
+                            bool on_radial_edge = (sec_pos < 1.8f || sec_pos > 28.2f);
+                            bool on_ring_edge   = (r < R_INNER_MIN + 1.4f || r > R_INNER_MAX - 1.4f);
+                            bool on_sep         = (sec_pos < 1.0f || sec_pos > 29.0f);
+                            int z = 5;
+                            if (on_sep) z = 6; /* sel ? sel_bdr : sep_col */
+                            else if (on_radial_edge || on_ring_edge) z = 7; /* sel ? sel_bdr : inner_fill */
+                            code = (uint8_t)((z << 4) | (sec & 0x0F));
+                        } else if (r <= R_HUB_MAX) {
+                            if (r > R_HUB_MAX - 1.5f) {
+                                code = 0x80 | 0x10; /* Hub border */
+                            } else {
+                                code = 0x80;        /* Hub interior */
+                            }
+                        } else {
+                            code = (1 << 4); /* sep_col ring gap */
+                        }
+                    }
+                    g_wheel_lut[py][px][sub] = code;
+                }
+            }
+        }
+    }
+    g_wheel_lut_ready = true;
+}
+
 static void render_circle_of_fifths_wheel(void) {
+    init_wheel_lut();
+
     /* Precompute sector colors for both rings (0..11) */
     uint32_t outer_fill[12], inner_fill[12];
     for (int s = 0; s < 12; s++) {
@@ -1231,8 +1412,9 @@ static void render_circle_of_fifths_wheel(void) {
     uint32_t bg_col   = RGB(13, 18, 28);
     uint32_t sep_col  = RGB(11, 15, 24);
     uint32_t sel_bdr  = RGB(254, 240, 138);
+    uint32_t hub_bdr  = (g_cur_ring == 2) ? sel_bdr : RGB(96, 165, 250);
 
-    /* 2x2 supersampled scan over the wheel bounding box */
+    /* Fast integer LUT scan over the wheel bounding box */
     int x0 = (int)(WHEEL_CX - R_OUTER_MAX - 2);
     int x1 = (int)(WHEEL_CX + R_OUTER_MAX + 2);
     int y0 = (int)(WHEEL_CY - R_OUTER_MAX - 2);
@@ -1244,58 +1426,34 @@ static void render_circle_of_fifths_wheel(void) {
             if (px < 0 || px >= 174) continue;
 
             uint32_t r_acc = 0, g_acc = 0, b_acc = 0;
-            for (int sy = 0; sy < 2; sy++) {
-                for (int sx = 0; sx < 2; sx++) {
-                    float fx = (float)px + (sx ? 0.75f : 0.25f) - WHEEL_CX;
-                    float fy = (float)py + (sy ? 0.75f : 0.25f) - WHEEL_CY;
-                    float r = sqrtf(fx * fx + fy * fy);
-
-                    uint32_t sc = bg_col;
-                    if (r <= R_OUTER_MAX) {
-                        /* Angle from 12 o'clock (-90 deg), shifted by +15 deg so sector 0 is centered at 12:00 */
-                        float deg = atan2f(fy, fx) * (180.0f / (float)M_PI) + 90.0f + 15.0f;
-                        while (deg < 0.0f)   deg += 360.0f;
-                        while (deg >= 360.0f) deg -= 360.0f;
-                        int sec = ((int)(deg / 30.0f)) % 12;
-                        float sec_pos = fmodf(deg, 30.0f);
-
-                        if (r >= R_OUTER_MIN && r <= R_OUTER_MAX) {
-                            bool sel = (g_cur_ring == 0 && g_cur_sector == sec);
-                            bool on_radial_edge = (sec_pos < 1.3f || sec_pos > 28.7f);
-                            bool on_ring_edge   = (r < R_OUTER_MIN + 1.4f || r > R_OUTER_MAX - 1.4f);
-                            if (sel && (on_radial_edge || on_ring_edge)) {
-                                sc = sel_bdr;
-                            } else if (sec_pos < 0.8f || sec_pos > 29.2f) {
-                                sc = sep_col;
-                            } else {
-                                sc = outer_fill[sec];
-                            }
-                        } else if (r >= R_INNER_MIN && r <= R_INNER_MAX) {
-                            bool sel = (g_cur_ring == 1 && g_cur_sector == sec);
-                            bool on_radial_edge = (sec_pos < 1.8f || sec_pos > 28.2f);
-                            bool on_ring_edge   = (r < R_INNER_MIN + 1.4f || r > R_INNER_MAX - 1.4f);
-                            if (sel && (on_radial_edge || on_ring_edge)) {
-                                sc = sel_bdr;
-                            } else if (sec_pos < 1.0f || sec_pos > 29.0f) {
-                                sc = sep_col;
-                            } else {
-                                sc = inner_fill[sec];
-                            }
-                        } else if (r <= R_HUB_MAX) {
-                            bool sel = (g_cur_ring == 2);
-                            if (r > R_HUB_MAX - 1.5f) {
-                                sc = sel ? sel_bdr : RGB(96, 165, 250);
-                            } else {
-                                sc = hub_fill;
-                            }
-                        } else {
-                            sc = sep_col;
-                        }
+            const uint8_t *sub_lut = g_wheel_lut[py][px];
+            for (int sub = 0; sub < 4; sub++) {
+                uint8_t code = sub_lut[sub];
+                uint32_t sc;
+                if (code == 0) {
+                    sc = bg_col;
+                } else if (code & 0x80) {
+                    sc = (code & 0x10) ? hub_bdr : hub_fill;
+                } else {
+                    int z   = (code >> 4) & 0x07;
+                    int sec = code & 0x0F;
+                    if (z == 1) {
+                        sc = sep_col;
+                    } else if (z <= 4) {
+                        bool sel = (g_cur_ring == 0 && g_cur_sector == sec);
+                        if (z == 2)      sc = outer_fill[sec];
+                        else if (z == 3) sc = sel ? sel_bdr : sep_col;
+                        else             sc = sel ? sel_bdr : outer_fill[sec];
+                    } else {
+                        bool sel = (g_cur_ring == 1 && g_cur_sector == sec);
+                        if (z == 5)      sc = inner_fill[sec];
+                        else if (z == 6) sc = sel ? sel_bdr : sep_col;
+                        else             sc = sel ? sel_bdr : inner_fill[sec];
                     }
-                    r_acc += (sc >> 16) & 0xFF;
-                    g_acc += (sc >> 8)  & 0xFF;
-                    b_acc += sc & 0xFF;
                 }
+                r_acc += (sc >> 16) & 0xFF;
+                g_acc += (sc >> 8)  & 0xFF;
+                b_acc += sc & 0xFF;
             }
             g_fb[py * SCREEN_W + px] = RGB(r_acc >> 2, g_acc >> 2, b_acc >> 2);
         }
@@ -1710,7 +1868,9 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
-    /* Strum initial chord softly on startup */
+    /* Start background Karplus-Strong synthesis thread & strum initial chord */
+    init_wheel_lut();
+    start_synth_worker();
     strum_current_selection();
 
     bool running = true;
@@ -1741,10 +1901,8 @@ int main(int argc, char *argv[]) {
                 if (g_show_help) {
                     if (k == V90_BTN_LEFT) {
                         apply_progression_preset(g_preset_idx - 1);
-                        save_config();
                     } else if (k == V90_BTN_RIGHT) {
                         apply_progression_preset(g_preset_idx + 1);
-                        save_config();
                     } else if (k == V90_BTN_A || k == SDLK_a) {
                         g_loop_playing = !g_loop_playing;
                         g_loop_step = 0;
@@ -1773,7 +1931,6 @@ int main(int argc, char *argv[]) {
                         g_cur_sector = (g_cur_sector + 1) % 12;
                     }
                     strum_current_selection();
-                    save_config();
                 } else if (k == V90_BTN_LEFT) {
                     g_loop_playing = false;
                     if (!g_key_locked) {
@@ -1786,19 +1943,16 @@ int main(int argc, char *argv[]) {
                         g_cur_sector = (g_cur_sector + 11) % 12;
                     }
                     strum_current_selection();
-                    save_config();
                 } else if (k == V90_BTN_DOWN) {
                     g_loop_playing = false;
                     if (g_cur_ring < 2) g_cur_ring++;
                     else g_cur_ring = 0;
                     strum_current_selection();
-                    save_config();
                 } else if (k == V90_BTN_UP) {
                     g_loop_playing = false;
                     if (g_cur_ring > 0) g_cur_ring--;
                     else g_cur_ring = 2;
                     strum_current_selection();
-                    save_config();
                 } else if (k == V90_BTN_A || k == SDLK_a) {
                     strum_current_selection();
                 } else if (k == V90_BTN_B || k == SDLK_b) {
@@ -1807,7 +1961,6 @@ int main(int argc, char *argv[]) {
                         g_prog[i].use_7th = g_seventh_mode;
                     }
                     strum_current_selection();
-                    save_config();
                 } else if (k == V90_BTN_R1
 #if defined(HOST_X11)
                            || k == SDLK_BRACKETRIGHT
@@ -1815,7 +1968,6 @@ int main(int argc, char *argv[]) {
                 ) {
                     g_voicing_idx = (g_voicing_idx + 1) % 3;
                     strum_current_selection();
-                    save_config();
                 } else if (k == V90_BTN_L1
 #if defined(HOST_X11)
                            || k == SDLK_BRACKETLEFT
@@ -1823,7 +1975,6 @@ int main(int argc, char *argv[]) {
                 ) {
                     g_voicing_idx = (g_voicing_idx + 2) % 3;
                     strum_current_selection();
-                    save_config();
                 } else if (k == V90_BTN_SELECT
 #if defined(HOST_X11)
                            || k == SDLK_HOME || k == SDLK_c
@@ -1833,14 +1984,12 @@ int main(int argc, char *argv[]) {
                     if (!g_key_locked) {
                         g_cur_sector = g_key_sector;
                     }
-                    save_config();
                 } else if (k == V90_BTN_X || k == SDLK_x) {
                     g_prog[g_prog_write_idx].sector  = g_cur_sector;
                     g_prog[g_prog_write_idx].ring    = g_cur_ring;
                     g_prog[g_prog_write_idx].use_7th = g_seventh_mode;
                     g_prog_write_idx = (g_prog_write_idx + 1) % 4;
                     strum_current_selection();
-                    save_config();
                 }
 #if defined(HOST_X11)
                 else if (k == SDLK_p) {
@@ -1871,6 +2020,7 @@ int main(int argc, char *argv[]) {
         SDL_Delay(16);
     }
 
+    stop_synth_worker();
     save_config();
     if (audio_ok) {
         SDL_CloseAudio();
