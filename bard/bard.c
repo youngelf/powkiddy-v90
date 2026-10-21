@@ -521,6 +521,7 @@ static int           g_cur_page = 0;
 static int           g_total_pages = 1;
 static bool          g_dark_theme = false;
 static AppState      g_state = STATE_FILE_BROWSER;
+static AppState      g_help_prev_state = STATE_READING;
 
 /* =========================================================================
  * UTF-8 Normalization & Word-Wrapping Paginator (Zero Horizontal Scroll)
@@ -1755,7 +1756,7 @@ static void render_file_browser(void) {
     fill_rect(0, 225, SCREEN_W, 15, RGB(10, 14, 23));
     fill_rect(0, 225, SCREEN_W, 1, RGB(30, 41, 59));
     draw_text_centered(FONT_UI_10, 0, 226, SCREEN_W, 14,
-                       "UP/DN:Move  A:Open Book/Dir  B:Up Dir  START:Quit",
+                       "UP/DN:Move  A:Open  B:Up Dir  Y:Help  MENU:Quit",
                        RGB(148, 163, 184));
 }
 
@@ -1793,7 +1794,11 @@ static void render_reading_view(void) {
 }
 
 static void render_help_modal(void) {
-    render_reading_view();
+    if (g_help_prev_state == STATE_FILE_BROWSER || g_chapter_count == 0) {
+        render_file_browser();
+    } else {
+        render_reading_view();
+    }
 
     int mx = 12, my = 12, mw = SCREEN_W - 24, mh = SCREEN_H - 24;
     fill_rect(mx, my, mw, mh, RGB(17, 24, 39));
@@ -1805,7 +1810,8 @@ static void render_help_modal(void) {
     fill_rect(mx + 2, my + 24, mw - 4, 1, RGB(71, 85, 105));
     draw_pill(mx + 6, my + 5, 42, 15, RGB(37, 99, 235), RGB(96, 165, 250));
     draw_text_centered(FONT_UI_10, mx + 6, my + 5, 42, 15, "HELP", RGB(255, 255, 255));
-    draw_text_clipped(FONT_UI_12, mx + 54, my + 5, mw - 60, g_book_title, RGB(248, 250, 252));
+    const char *hdr_title = (g_book_title[0] != '\0') ? g_book_title : "BARD EPUB & TEXT READER";
+    draw_text_clipped(FONT_UI_12, mx + 54, my + 5, mw - 60, hdr_title, RGB(248, 250, 252));
 
     /* Chapter Name & Current Progress Section */
     int cy = my + 30;
@@ -1813,10 +1819,16 @@ static void render_help_modal(void) {
     draw_border(mx + 6, cy, mw - 12, 62, RGB(51, 65, 85));
 
     char ch_hdr[64];
-    snprintf(ch_hdr, sizeof(ch_hdr), "CHAPTER (%d of %d)", g_cur_chapter + 1, g_chapter_count);
+    if (g_chapter_count > 0) {
+        snprintf(ch_hdr, sizeof(ch_hdr), "CHAPTER (%d of %d)", g_cur_chapter + 1, g_chapter_count);
+    } else {
+        snprintf(ch_hdr, sizeof(ch_hdr), "LIBRARY BROWSER (%.38s)", g_cwd);
+    }
     draw_text(FONT_UI_10, mx + 12, cy + 4, ch_hdr, RGB(125, 211, 252));
 
-    const char *ch_title = (g_cur_chapter < g_chapter_count) ? g_chapters[g_cur_chapter].title : g_book_title;
+    const char *ch_title = (g_chapter_count > 0 && g_cur_chapter < g_chapter_count)
+                           ? g_chapters[g_cur_chapter].title
+                           : "Select an .epub or .txt file with [A]";
     draw_text_clipped(FONT_UI_12, mx + 12, cy + 17, mw - 24, ch_title, RGB(255, 255, 255));
 
     /* Compute chapter progress and overall book progress */
@@ -1857,7 +1869,7 @@ static void render_help_modal(void) {
         { "X",         "Files (/mnt/media Browser)"   },
         { "UP / DOWN", "Scroll One Page Up / Down"    },
         { "B",         "Switch Light / Dark Mode"     },
-        { "START",     "Quit Reader"                  }
+        { "MENU",      "Quit Reader"                  }
     };
 
     for (int i = 0; i < 5; i++) {
@@ -2086,8 +2098,8 @@ int main(int argc, char *argv[]) {
             if (ev.type == SDL_KEYDOWN) {
                 SDLKey k = ev.key.keysym.sym;
 
-                /* START or MENU (or Q on desktop) quits the reader */
-                if (k == V90_BTN_START || k == V90_BTN_MENU || k == SDLK_q) {
+                /* MENU (or Q on desktop) quits the reader */
+                if (k == V90_BTN_MENU || k == SDLK_q) {
                     running = false;
                     break;
                 }
@@ -2101,7 +2113,7 @@ int main(int argc, char *argv[]) {
                         if (g_file_sel >= g_file_scroll + BROWSER_ROWS) {
                             g_file_scroll = g_file_sel - BROWSER_ROWS + 1;
                         }
-                    } else if (k == V90_BTN_A || k == SDLK_a || k == SDLK_SPACE) {
+                    } else if (k == V90_BTN_A || k == SDLK_a) {
                         if (g_file_sel >= 0 && g_file_sel < g_file_count) {
                             char target[PATH_MAX + 512];
                             snprintf(target, sizeof(target), "%s/%s", g_cwd, g_files[g_file_sel].name);
@@ -2118,6 +2130,9 @@ int main(int argc, char *argv[]) {
                             snprintf(parent, sizeof(parent), "%s/..", g_cwd);
                             scan_directory(parent);
                         }
+                    } else if (k == V90_BTN_Y || k == SDLK_y || k == SDLK_h) {
+                        g_help_prev_state = STATE_FILE_BROWSER;
+                        g_state = STATE_HELP;
                     }
                 } else if (g_state == STATE_READING) {
                     /* DPAD DOWN: Scroll one whole page forward */
@@ -2162,11 +2177,12 @@ int main(int argc, char *argv[]) {
                     }
                     /* Y button (or Y/H/Space on desktop): Open Help Screen */
                     else if (k == V90_BTN_Y || k == SDLK_y || k == SDLK_h) {
+                        g_help_prev_state = STATE_READING;
                         g_state = STATE_HELP;
                     }
                 } else if (g_state == STATE_HELP) {
                     /* From Help screen, allow direct shortcuts, B to toggle theme, or Y / A to close */
-                    if (k == V90_BTN_SELECT || k == SDLK_HOME || k == SDLK_c) {
+                    if ((k == V90_BTN_SELECT || k == SDLK_HOME || k == SDLK_c) && g_chapter_count > 0) {
                         g_state = STATE_CHAPTER_LIST;
                         g_toc_sel = g_cur_chapter;
                         if (g_toc_sel < g_toc_scroll) {
@@ -2181,7 +2197,7 @@ int main(int argc, char *argv[]) {
                         save_reader_state();
                     } else if (k == V90_BTN_Y || k == SDLK_y || k == SDLK_h ||
                                k == V90_BTN_A || k == SDLK_a) {
-                        g_state = STATE_READING;
+                        g_state = (g_chapter_count > 0) ? g_help_prev_state : STATE_FILE_BROWSER;
                     }
                 } else if (g_state == STATE_CHAPTER_LIST) {
                     /* DPAD UP/DOWN: Select chapter in TOC */

@@ -15,7 +15,7 @@
  *   L1 / R1 (Tab/BS / [/])    : Scales: Cycle CAGED Box (ALL NECK, POS 1..5) | Chords: Cycle 5 CAGED Voicings | Explorer: -/+3 Frets
  *   DPAD UP / DOWN            : Scales/Chords: Transpose Root Key (C .. B) | Explorer: Move String Cursor (e .. E)
  *   DPAD LEFT / RIGHT         : Scales: Cycle 14 Scales | Chords: Cycle 12 Chord Qualities | Explorer: Move Fret Cursor (0 .. 15)
- *   START (Enter / RAlt / Q)  : Save configuration & Exit
+ *   MENU (RCtrl / Q)          : Save configuration & Exit
  */
 
 #include <stdio.h>
@@ -1819,7 +1819,7 @@ static void render_help_modal(void) {
         { "X Button",     "Cycle Labels: Intervals -> Notes -> Degrees" },
         { "L1 / R1",      "Cycle 5 CAGED Boxes or 5 Chord Voicings" },
         { "DPAD U/D/L/R", "U/D: Root Key (C..B) | L/R: 14 Scales/12 Chords" },
-        { "START",        "Save settings & Exit to PowKiddy V90 menu" }
+        { "MENU",         "Save settings & Exit to PowKiddy V90 menu" }
     };
 
     for (int i = 0; i < 7; i++) {
@@ -1950,8 +1950,8 @@ int main(int argc, char *argv[]) {
             } else if (ev.type == SDL_KEYDOWN) {
                 SDLKey k = ev.key.keysym.sym;
 
-                /* START or MENU (or Q on desktop): Save & Exit */
-                if (k == V90_BTN_START || k == V90_BTN_MENU || k == SDLK_q) {
+                /* MENU (or Q on desktop): Save & Exit */
+                if (k == V90_BTN_MENU || k == SDLK_q) {
                     running = false;
                     break;
                 }

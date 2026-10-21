@@ -1557,7 +1557,7 @@ static void render_help_modal(void) {
         { "X Button",     "Mix: Full Band -> Drums+Bass -> Drums Only" },
         { "LEFT / RIGHT", "Jam: Cycle Style (Rock/Blues/Jazz 4/4 & 3/4)" },
         { "UP / DOWN",    "Jam: Transpose Key (C .. B)" },
-        { "L1 / R1 / ST", "L1/R1: Tempo -/+5 BPM  |  START: Save/Quit" }
+        { "L1/R1 / MENU", "L1/R1: Tempo -/+5 BPM  |  MENU: Save/Quit" }
     };
 
     for (int i = 0; i < 7; i++) {
@@ -1692,8 +1692,8 @@ int main(int argc, char *argv[]) {
             if (ev.type == SDL_KEYDOWN) {
                 SDLKey k = ev.key.keysym.sym;
 
-                /* START or MENU (or Q on desktop) saves state & quits */
-                if (k == V90_BTN_START || k == V90_BTN_MENU || k == SDLK_q) {
+                /* MENU (or Q on desktop) saves state & quits */
+                if (k == V90_BTN_MENU || k == SDLK_q) {
                     running = false;
                     break;
                 }

@@ -5,12 +5,12 @@
  *
  * Controls on PowKiddy V90 (MiyooCFW 1.3.3) & Linux Host:
  *   D-Pad (UP/DOWN/LEFT/RIGHT) : Navigate keypad grid (wraps around edges)
- *   A or B (LAlt / LCtrl)      : Activate selected key
+ *   A (LAlt)                   : Activate selected key
  *   SELECT (Escape)            : Toggle Basic Calculator <-> Scientific Calculator mode
  *   X (LShift)                 : Clear (C / AC)
  *   R1 (Backspace)             : Delete last digit (DEL)
  *   L1 (Tab)                   : Toggle Degrees (DEG) <-> Radians (RAD)
- *   START (Return / Enter)     : Quit calculator
+ *   Y (Space)                  : Toggle Help modal
  *   MENU (RCtrl) or 'Q'        : Quit calculator
  */
 
@@ -94,6 +94,7 @@ typedef int SDLKey;
 #define SDLK_b          XK_b
 #define SDLK_c          XK_c
 #define SDLK_d          XK_d
+#define SDLK_h          XK_h
 #define SDLK_m          XK_m
 #define SDLK_q          XK_q
 #define SDLK_s          XK_s
@@ -550,6 +551,7 @@ static const char *const k_sci_grid[SCI_ROWS][SCI_COLS] = {
 
 static CalcMode g_mode = MODE_DESK;
 static bool     g_deg_mode = true;     /* true = Degrees, false = Radians */
+static bool     g_show_help = false;
 static int      g_cur_row = 4;
 static int      g_cur_col = 4;         /* Starts on '=' in Desk Mode */
 
@@ -1104,8 +1106,43 @@ static void render_ui(SDL_Surface *screen) {
     fill_rect(0, 226, SCREEN_W, 14, RGB(11, 15, 25));
     fill_rect(0, 226, SCREEN_W, 1,  RGB(30, 41, 59));
     draw_text_centered(FONT_10, 0, 227, SCREEN_W, 13,
-                       "A/B:Input  SELECT:Basic/Sci  X:Clr  START:Quit",
+                       "A:Input  SELECT:Basic/Sci  X:Clr  Y:Help  MENU:Quit",
                        RGB(148, 163, 184));
+
+    if (g_show_help) {
+        int mx = 16, my = 18, mw = SCREEN_W - 32, mh = SCREEN_H - 36;
+        fill_rect(mx, my, mw, mh, RGB(15, 23, 42));
+        draw_pill(mx, my, mw, mh, RGB(15, 23, 42), RGB(59, 130, 246));
+        fill_rect(mx + 2, my + 2, mw - 4, 22, RGB(30, 41, 59));
+        fill_rect(mx + 2, my + 24, mw - 4, 1, RGB(56, 74, 106));
+        draw_pill(mx + 6, my + 5, 42, 15, RGB(37, 99, 235), RGB(96, 165, 250));
+        draw_text_centered(FONT_10, mx + 6, my + 5, 42, 15, "HELP", RGB(255, 255, 255));
+        draw_text(FONT_13, mx + 54, my + 5, "CALCULATOR CONTROLS", RGB(248, 250, 252));
+
+        static const struct {
+            const char *btn;
+            const char *desc;
+        } k_rows[7] = {
+            { "D-PAD",     "Navigate Keypad Grid" },
+            { "A Button",  "Input Selected Key" },
+            { "SELECT",    "Switch Basic <-> Scientific Mode" },
+            { "X Button",  "Clear All (C / AC)" },
+            { "R1 / L1",   "R1: Backspace (DEL) | L1: DEG/RAD" },
+            { "Y Button",  "Open / Close Help Screen" },
+            { "MENU",      "Quit Calculator" }
+        };
+        int ky = my + 31;
+        for (int i = 0; i < 7; i++) {
+            int ry = ky + i * 21;
+            draw_pill(mx + 8, ry, 68, 16, RGB(30, 58, 95), RGB(56, 189, 248));
+            draw_text_centered(FONT_10, mx + 8, ry, 68, 16, k_rows[i].btn, RGB(254, 240, 138));
+            draw_text(FONT_10, mx + 84, ry + 3, k_rows[i].desc, RGB(226, 232, 240));
+        }
+        fill_rect(mx + 2, my + mh - 18, mw - 4, 16, RGB(11, 15, 25));
+        draw_text_centered(FONT_10, mx, my + mh - 17, mw, 15,
+                           "Press Y, A, or B to close Help",
+                           RGB(147, 197, 253));
+    }
 
     present_frame(screen);
 }
@@ -1185,10 +1222,19 @@ int main(int argc, char *argv[]) {
                 int rows = (g_mode == MODE_DESK) ? DESK_ROWS : SCI_ROWS;
                 int cols = (g_mode == MODE_DESK) ? DESK_COLS : SCI_COLS;
 
-                /* START or MENU (or Q on desktop) quits the calculator */
-                if (k == V90_BTN_START || k == V90_BTN_MENU || k == SDLK_q) {
+                /* MENU (or Q on desktop) quits the calculator */
+                if (k == V90_BTN_MENU || k == SDLK_q) {
                     running = false;
                     break;
+                }
+                /* Y (or H on desktop) toggles the Help modal */
+                else if (k == V90_BTN_Y || k == SDLK_y || k == SDLK_h) {
+                    g_show_help = !g_show_help;
+                } else if (g_show_help) {
+                    if (k == V90_BTN_A || k == SDLK_a || k == V90_BTN_B || k == SDLK_b ||
+                        k == V90_BTN_SELECT) {
+                        g_show_help = false;
+                    }
                 }
                 /* SELECT (or Home on Linux desktop) toggles between Basic and Scientific mode */
                 else if (k == V90_BTN_SELECT || k == SDLK_HOME) {
@@ -1204,9 +1250,8 @@ int main(int argc, char *argv[]) {
                 } else if (k == V90_BTN_RIGHT) {
                     g_cur_col = (g_cur_col + 1) % cols;
                 }
-                /* A or B (or 'A'/'B'/Space on desktop) activates the focused button */
-                else if (k == V90_BTN_A || k == V90_BTN_B ||
-                         k == SDLK_a || k == SDLK_b || k == SDLK_SPACE) {
+                /* A (or 'A' on desktop) activates the focused button */
+                else if (k == V90_BTN_A || k == SDLK_a) {
                     const char *lbl = (g_mode == MODE_DESK)
                                       ? k_desk_grid[g_cur_row][g_cur_col]
                                       : k_sci_grid[g_cur_row][g_cur_col];

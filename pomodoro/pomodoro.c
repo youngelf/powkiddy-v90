@@ -6,13 +6,12 @@
  *
  * Controls:
  *   A Button (or 'A')               : Toggle Start / Stop (Pause) timer
- *   X Button (or 'X')               : Switch mode (Work <-> Short Break <-> Long Break)
- *   B Button (or 'B')               : Stop / Pause timer
- *   Y Button (or 'Y' / 'R' / Space) : Reset current session timer
+ *   B Button (or 'B' / 'R')         : Reset current session timer
+ *   SELECT (or LEFT / RIGHT)        : Switch mode (Work <-> Short Break <-> Long Break)
+ *   Y Button (or 'Y' / 'H' / Space) : Toggle Help Screen
  *   UP / DOWN or R1 / L1            : Adjust current mode duration (+/- 1 min when stopped)
  *   R2 / L2                         : Adjust current mode duration (+/- 5 min when stopped)
- *   LEFT / RIGHT                    : Cycle mode backward / forward
- *   START (V90) / SELECT/MENU (SP)  : Save & Exit
+ *   MENU (V90) / SELECT/MENU (SP)   : Save & Exit
  */
 
 #include <stdio.h>
@@ -198,6 +197,7 @@ static void SDL_CloseAudio(void) {}
 #define SDLK_b          XK_b
 #define SDLK_x          XK_x
 #define SDLK_y          XK_y
+#define SDLK_h          XK_h
 #define SDLK_r          XK_r
 #define SDLK_q          XK_q
 #define SDLK_m          XK_m
@@ -370,6 +370,7 @@ static void SDL_Quit(void) {
 #define SDLK_b          'b'
 #define SDLK_x          'x'
 #define SDLK_y          'y'
+#define SDLK_h          'h'
 #define SDLK_r          'r'
 #define SDLK_q          'q'
 #define SDLK_m          'm'
@@ -865,6 +866,7 @@ static void SDL_Quit(void) {
 #define V90_BTN_SELECT  SDLK_ESCAPE
 #define V90_BTN_START   SDLK_RETURN
 #define V90_BTN_RESET   SDLK_RCTRL
+#define V90_BTN_MENU    SDLK_RCTRL
 #define V90_BTN_UP      SDLK_UP
 #define V90_BTN_DOWN    SDLK_DOWN
 #define V90_BTN_LEFT    SDLK_LEFT
@@ -1324,8 +1326,7 @@ int main(int argc, char *argv[]) {
     Uint32 accum_ms = 0;
     int unsaved_work_sec = 0;
 
-    bool select_held = false;
-    bool start_held = false;
+    bool show_help = false;
     bool running = true;
 
     while (running && !g_sig_quit) {
@@ -1336,9 +1337,6 @@ int main(int argc, char *argv[]) {
             } else if (ev.type == SDL_KEYDOWN) {
                 SDLKey k = ev.key.keysym.sym;
 
-                if (k == V90_BTN_SELECT) select_held = true;
-                if (k == V90_BTN_START)  start_held = true;
-
 #if defined(TARGET_RG35XXSP)
                 /* Clamshell lid closed: flush stats immediately to SD card */
                 if (k == SDLK_LID_CLOSE) {
@@ -1346,14 +1344,40 @@ int main(int argc, char *argv[]) {
                     unsaved_work_sec = 0;
                     continue;
                 }
+                /* SELECT / MENU (or Q / M): Save and exit on RG35XXSP */
+                if (k == V90_BTN_SELECT || k == V90_BTN_RESET || k == SDLK_q || k == SDLK_m) {
+                    running = false;
+                    continue;
+                }
+#elif defined(HOST_X11)
+                /* MENU (Right Ctrl), Q, or M: Save and exit on Linux Host */
+                if (k == V90_BTN_MENU || k == SDLK_q || k == SDLK_m) {
+                    running = false;
+                    continue;
+                }
+#else
+                /* MENU (Right Ctrl): Save and exit on PowKiddy V90 */
+                if (k == V90_BTN_MENU) {
+                    running = false;
+                    continue;
+                }
 #endif
 
-                /* A Button (or 'A'/Space on keyboard): Toggle Start / Stop */
-#ifdef HOST_X11
-                if (k == V90_BTN_A || k == SDLK_a || k == SDLK_SPACE) {
-#else
+                /* Y Button (Space or 'Y'/'H'): Toggle Help screen */
+                if (k == V90_BTN_Y || k == SDLK_y || k == SDLK_h) {
+                    show_help = !show_help;
+                    continue;
+                }
+                if (show_help) {
+                    if (k == V90_BTN_A || k == V90_BTN_B || k == V90_BTN_SELECT ||
+                        k == SDLK_a || k == SDLK_b) {
+                        show_help = false;
+                    }
+                    continue;
+                }
+
+                /* A Button (or 'A' on keyboard): Toggle Start / Stop */
                 if (k == V90_BTN_A || k == SDLK_a) {
-#endif
                     if (status == STATUS_RUNNING) {
                         status = STATUS_PAUSED;
                         save_stats();
@@ -1373,20 +1397,17 @@ int main(int argc, char *argv[]) {
                         last_tick_ms = SDL_GetTicks();
                     }
                 }
-                /* B Button (or 'B' on keyboard): Stop / Pause timer */
-                else if (k == V90_BTN_B || k == SDLK_b) {
-                    if (status == STATUS_RUNNING) {
-                        status = STATUS_PAUSED;
-                        save_stats();
-                        unsaved_work_sec = 0;
-                    } else if (status == STATUS_DONE) {
-                        status = STATUS_READY;
-                        total_phase_sec = get_mode_duration(mode);
-                        remaining_sec = total_phase_sec;
-                    }
+                /* B Button (or 'B' / 'R' on keyboard): Reset current timer */
+                else if (k == V90_BTN_B || k == SDLK_b || k == SDLK_r) {
+                    status = STATUS_READY;
+                    total_phase_sec = get_mode_duration(mode);
+                    remaining_sec = total_phase_sec;
+                    accum_ms = 0;
+                    save_stats();
+                    unsaved_work_sec = 0;
                 }
-                /* X Button or D-Pad LEFT/RIGHT: Switch mode */
-                else if (k == V90_BTN_X || k == SDLK_x || k == V90_BTN_LEFT || k == V90_BTN_RIGHT) {
+                /* SELECT Button (or D-Pad LEFT/RIGHT): Switch mode */
+                else if (k == V90_BTN_SELECT || k == V90_BTN_LEFT || k == V90_BTN_RIGHT) {
                     save_stats();
                     unsaved_work_sec = 0;
                     if (k == V90_BTN_LEFT) {
@@ -1398,15 +1419,6 @@ int main(int argc, char *argv[]) {
                     total_phase_sec = get_mode_duration(mode);
                     remaining_sec = total_phase_sec;
                     accum_ms = 0;
-                }
-                /* Y Button (or 'Y'/'R'/Space on keyboard): Reset current timer */
-                else if (k == V90_BTN_Y || k == SDLK_y || k == SDLK_r) {
-                    status = STATUS_READY;
-                    total_phase_sec = get_mode_duration(mode);
-                    remaining_sec = total_phase_sec;
-                    accum_ms = 0;
-                    save_stats();
-                    unsaved_work_sec = 0;
                 }
                 /* UP / DOWN or Shoulder Buttons (L1/R1 = +/-1m, L2/R2 = +/-5m): Adjust duration when not running */
                 else if ((k == V90_BTN_UP || k == V90_BTN_DOWN ||
@@ -1437,26 +1449,6 @@ int main(int argc, char *argv[]) {
                     accum_ms = 0;
                     save_stats();
                 }
-#if defined(TARGET_RG35XXSP)
-                /* SELECT / MENU (or Q / M): Save and exit on RG35XXSP */
-                else if (k == V90_BTN_SELECT || k == V90_BTN_RESET || k == SDLK_q || k == SDLK_m) {
-                    running = false;
-                }
-#elif defined(HOST_X11)
-                /* START (Enter), Esc, Q, or M: Save and exit on Linux Host */
-                else if (k == V90_BTN_START || k == V90_BTN_SELECT || k == V90_BTN_RESET || k == SDLK_q || k == SDLK_m) {
-                    running = false;
-                }
-#else
-                /* START: Save and exit on PowKiddy V90 */
-                else if (k == V90_BTN_START) {
-                    running = false;
-                }
-#endif
-            } else if (ev.type == SDL_KEYUP) {
-                SDLKey k = ev.key.keysym.sym;
-                if (k == V90_BTN_SELECT) select_held = false;
-                if (k == V90_BTN_START)  start_held = false;
             } else if (ev.type == SDL_JOYBUTTONDOWN) {
                 /* Fallback if SDL joystick events are emitted */
                 if (ev.jbutton.button == 1 || ev.jbutton.button == 0) {
@@ -1469,18 +1461,16 @@ int main(int argc, char *argv[]) {
                             status = STATUS_RUNNING;
                             last_tick_ms = SDL_GetTicks();
                         }
-                    } else { /* B: Stop */
-                        if (status == STATUS_RUNNING) {
-                            status = STATUS_PAUSED;
-                            save_stats();
-                        }
+                    } else { /* B: Reset */
+                        status = STATUS_READY;
+                        total_phase_sec = get_mode_duration(mode);
+                        remaining_sec = total_phase_sec;
+                        accum_ms = 0;
+                        save_stats();
+                        unsaved_work_sec = 0;
                     }
                 }
             }
-        }
-
-        if (select_held && start_held) {
-            running = false;
         }
 
         /* Update Timer */
@@ -1664,19 +1654,48 @@ int main(int argc, char *argv[]) {
         draw_rect(screen, 0, 214, SCREEN_W, 26, col_header);
         draw_rect(screen, 0, 214, SCREEN_W, 1, col_border);
 
-        /* Highlight A (Start/Stop) and X (Mode) button hints */
+        /* Highlight A (Start/Stop) and SELECT (Mode) button hints */
         Uint32 a_btn_col = (status == STATUS_RUNNING) ? col_paused : col_running;
-        draw_rect(screen, 8, 220, 96, 14, a_btn_col);
-        draw_text_centered(screen, 56, 224, "[A] START/STOP", 1, col_bg);
+        draw_rect(screen, 6, 220, 88, 14, a_btn_col);
+        draw_text_centered(screen, 50, 224, "[A] START/STOP", 1, col_bg);
 
-        draw_rect(screen, 110, 220, 62, 14, col_break);
-        draw_text_centered(screen, 141, 224, "[X] MODE", 1, col_white);
+        draw_rect(screen, 98, 220, 64, 14, col_break);
+        draw_text_centered(screen, 130, 224, "[SEL] MODE", 1, col_white);
 
 #if defined(TARGET_RG35XXSP)
-        draw_text(screen, 180, 224, "[Y]RST [M/SEL]EXIT", 1, col_white);
+        draw_text(screen, 168, 224, "[B]RST [Y]HLP [M/SEL]EXIT", 1, col_white);
 #else
-        draw_text(screen, 180, 224, "[Y]RST [START]EXIT", 1, col_white);
+        draw_text(screen, 168, 224, "[B]RST [Y]HLP [MENU]EXIT", 1, col_white);
 #endif
+
+        if (show_help) {
+            int mx = 14, my = 18, mw = SCREEN_W - 28, mh = SCREEN_H - 36;
+            draw_rect(screen, mx, my, mw, mh, col_panel);
+            draw_border(screen, mx, my, mw, mh, 2, col_break);
+            draw_rect(screen, mx + 2, my + 2, mw - 4, 22, col_header);
+            draw_text_centered(screen, SCREEN_W / 2, my + 6, "POMODORO CONTROLS", 2, col_gold);
+
+            static const struct {
+                const char *btn;
+                const char *desc;
+            } k_help[6] = {
+                { "[A] BUTTON",  "START / PAUSE TIMER" },
+                { "[B] BUTTON",  "RESET CURRENT SESSION TIMER" },
+                { "[SELECT]",    "SWITCH MODE (WORK / BREAK)" },
+                { "[UP/DN L/R]", "L/R: MODE | U/D/L1/R1: +/-1M" },
+                { "[Y] BUTTON",  "OPEN / CLOSE HELP SCREEN" },
+                { "[MENU]",      "SAVE WORK STATS & EXIT" }
+            };
+            for (int i = 0; i < 6; i++) {
+                int ry = my + 32 + i * 24;
+                draw_rect(screen, mx + 8, ry, 82, 18, col_bar_bg);
+                draw_border(screen, mx + 8, ry, 82, 18, 1, col_gold);
+                draw_text_centered(screen, mx + 49, ry + 5, k_help[i].btn, 1, col_gold);
+                draw_text(screen, mx + 98, ry + 5, k_help[i].desc, 1, col_white);
+            }
+            draw_rect(screen, mx + 2, my + mh - 18, mw - 4, 16, col_header);
+            draw_text_centered(screen, SCREEN_W / 2, my + mh - 13, "PRESS [Y] TO CLOSE HELP", 1, col_break);
+        }
 
         SDL_Flip(screen);
         SDL_Delay(50); /* ~20 FPS to save battery */

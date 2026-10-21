@@ -20,6 +20,7 @@ Every application in this repository compiles both for the **PowKiddy V90 (`arm-
 | [`chordwheel/`](chordwheel/) | **Circle of Fifths & Guitar Voicing Synth (`chordwheel`)** — Interactive Circle of Fifths, 6-string fretboard chord diagrams, and Karplus-Strong guitar synth | `/mnt/apps/chordwheel/chordwheel` | `chordwheel/chordwheel_linux` |
 | [`pocketband/`](pocketband/) | **Pocket Drum Machine, Bassline & Backing Track Jam Buddy (`pocketband`)** — `4/4` & `3/4` Blues/Rock/Jazz drum + bass + chord backing band with 12-fret guitar soloing scale map | `/mnt/apps/pocketband/pocketband` | `pocketband/pocketband_linux` |
 | [`fretboard/`](fretboard/) | **Interactive Guitar Fretboard, CAGED Scale, Chord & Arpeggio Reference (`fretboard`)** — 15-fret neck with 14 scales, 5 CAGED boxes, 12 chord qualities, Reverse Chord Finder, 6 tunings, and Karplus-Strong synth | `/mnt/apps/fretboard/fretboard` | `fretboard/fretboard_linux` |
+| [`licktrainer/`](licktrainer/) | **Guitar Speed-Builder Practice Routine & Lick Coach (`licktrainer`)** — 25 exercises across 5 categories with 6-string tab, picking & fingerings, live 8-fret neck view, BPM speed ladder, and background Karplus-Strong synth | `/mnt/apps/licktrainer/licktrainer` | `licktrainer/licktrainer_linux` |
 | [`eartrainer/`](eartrainer/) | **Guitar Interval & Chord Ear Trainer (`eartrainer`)** — 12 intervals & 12 chord qualities with 6-string fretboard visualizer, 3-guess flow, and Karplus-Strong guitar synth | `/mnt/apps/eartrainer/eartrainer` | `eartrainer/eartrainer_linux` |
 | [`gmu/`](gmu/) | **Gmu Music Player (Keymap Fix & Port)** — Fixes swapped `A`/`B` & `X`/`Y` buttons on V90 and adds modern GCC desktop build support | `/mnt/apps/gmu/` | `gmu/gmu.bin` |
 | [`patch_bootlogo/`](patch_bootlogo/) | **Boot Splash Patcher** — Replaces the embedded PNG inside `/mnt/boot-logo` on a `powkiddy-q90-v90-cfw-v1.3.3.img` image | `/mnt/boot-logo` inside `.img` | `patch_bootlogo/patch_boot_logo` |
@@ -168,3 +169,24 @@ See [`fretboard/README.md`](fretboard/README.md) for controls, build instruction
 | Scales & CAGED Box View (`A Blues`, `POS 1`) | Chords & Arpeggios View (`Cmaj7`, `Voicing 2`) | Fret Explorer & Reverse Chord Finder (`Em(add9)`) | Help & 6 Guitar Tunings Modal (`Y`) |
 | :---: | :---: | :---: | :---: |
 | ![Scales & CAGED View](fretboard/promo/fretboard_scales.png) | ![Chords & Arpeggios View](fretboard/promo/fretboard_chords.png) | ![Fret Explorer View](fretboard/promo/fretboard_explorer.png) | ![Help & Tunings Modal](fretboard/promo/fretboard_help.png) |
+
+
+---
+
+## 12. [Guitar Speed-Builder Practice Routine & Lick Coach (`licktrainer`)](licktrainer/)
+
+A hands-free guitar technique coach, 6-string tab player, and automated BPM speed-builder ([`licktrainer/licktrainer.c`](licktrainer/licktrainer.c)):
+- **25 Built-In Guitar Exercises Across 5 Categories (`L1` / `R1` for Category, `LEFT` / `RIGHT` for Lick)**:
+  1. **`PENTATONIC` (`#01`–`#05`)**: *Gilbert 4-Note Seq*, *Eric Johnson 5s*, *Pentatonic Threes (12/8)*, *Wide String Skip*, and *Box 1-to-2 Slide*.
+  2. **`LEGATO/ARP` (`#06`–`#10`)**: *Legato 3-NPS Roll*, *Minor Triad Arp*, *Min7 Skipped Arp*, *Dim7 Symmetry Arp*, and *5-Str Sweep Shape*.
+  3. **`ALT PICK` (`#11`–`#15`)**: *Gilbert 3-NPS Cell*, *Neoclassic Pedal*, *Diatonic 4-Note*, *Di Meola Syncopa*, and *Cross-String Jump*.
+  4. **`BLUES/ROCK` (`#16`–`#20`)**: *BB & Albert Turn*, *SRV Texas Shuffle*, *Dorian Mixo Run*, *Hendrix Chord Embl*, and *Blues b5 Cascade*.
+  5. **`SPIDER` (`#21`–`#25`)**: *1-2-3-4 Spider*, *1-3-2-4 Permute*, *Skipping Spider*, *Diagonal Spider*, and *4-3-2-1 Pinky Work*.
+- **6-String Guitar Tab (`e B G D A E`) + Live 8-Fret Neck View**: Shows picking/articulation directions (`D`, `U`, `H`, `P`, `/`) above the staff, left-hand finger numbers (`1–4`) below the staff, and a zoomed 8-fret guitar neck highlighting the full lick shape and active note.
+- **Automated BPM Speed-Builder Ladder (`X`) & Background Karplus-Strong Synth (`B`)**: Pre-synthesizes every step's plucked/legato string audio in a dedicated background thread (`synth_worker_thread_fn`) with atomic preemption so the UI stays 100% responsive.
+
+See [`licktrainer/README.md`](licktrainer/README.md) for controls, build instructions, and SD card deployment steps.
+
+| Pentatonic Licks (`#01` Gilbert 4-Note Seq) | Legato & Arpeggios (`#10` 5-Str Sweep) | Warmup & Spider (`#21` 1-2-3-4 Spider) | Controls & Practice Guide (`Y`) |
+| :---: | :---: | :---: | :---: |
+| ![Pentatonic Licks](licktrainer/promo/licktrainer_pentatonic.png) | ![Legato & Arpeggios](licktrainer/promo/licktrainer_legato.png) | ![Warmup & Spider](licktrainer/promo/licktrainer_spider.png) | ![Controls & Guide](licktrainer/promo/licktrainer_help.png) |

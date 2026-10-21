@@ -1278,11 +1278,19 @@ static void render_keypad_grid(void) {
 
             const char *main_lbl = (g_mode == MODE_INTERVALS) ? k_intervals[idx].short_name
                                                               : k_chords[idx].short_name;
-            const char *sub_lbl  = (g_mode == MODE_INTERVALS) ? k_intervals[idx].sub_label
-                                                              : k_chords[idx].formula;
 
-            draw_text_centered(FONT_UI_12, bx, by + 2, bw, 16, main_lbl, txt_col);
-            draw_text_centered(FONT_UI_10, bx, by + 17, bw, 13, sub_lbl, sub_col);
+            if (g_mode == MODE_INTERVALS) {
+                /* Large 22px bold interval name ('m2', 'M2', 'm3', 'M3', ...), with
+                 * just the semitone number tucked in the bottom-right corner */
+                draw_text_centered(FONT_BTN_22, bx, by - 1, bw - 8, bh, main_lbl, txt_col);
+
+                char num_lbl[8];
+                snprintf(num_lbl, sizeof(num_lbl), "%d", k_intervals[idx].semitones);
+                draw_text_right(FONT_UI_10, bx + bw - 4, by + bh - 12, num_lbl, sub_col);
+            } else {
+                /* Large 18px bold chord name centered in the button */
+                draw_text_centered(FONT_BTN_18, bx, by, bw, bh, main_lbl, txt_col);
+            }
         }
     }
 }
@@ -1341,7 +1349,7 @@ static void render_help_stats_modal(void) {
         { "X",           "Audition & Compare on Fretboard"     },
         { "SELECT",      "Switch: Intervals <-> Chords"        },
         { "L1 / R1",     "L1: Play Style  |  R1: Difficulty"   },
-        { "START / Y",   "START: Save & Quit | Y: Close Help"  }
+        { "MENU / Y",    "MENU: Save & Quit | Y: Close Help"   }
     };
 
     for (int i = 0; i < 5; i++) {
@@ -1528,7 +1536,7 @@ int main(int argc, char *argv[]) {
             if (ev.type == SDL_KEYDOWN) {
                 SDLKey k = ev.key.keysym.sym;
 
-                if (k == V90_BTN_START || k == V90_BTN_MENU || k == SDLK_q) {
+                if (k == V90_BTN_MENU || k == SDLK_q) {
                     running = false;
                     break;
                 }

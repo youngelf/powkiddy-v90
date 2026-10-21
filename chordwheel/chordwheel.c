@@ -13,7 +13,7 @@
  *   SELECT (Escape / Home / C)  : Toggle Key-Rotate Mode vs Chord-Explore (Lock Key) Mode
  *   X (LShift / X)              : Add current chord to 4-bar Progression (or Play/Stop Loop in Help)
  *   Y (Space / Y / H)           : Open / Close Help, Progression Looper & Presets Modal
- *   START / MENU (Enter / Q)    : Save state & Exit
+ *   MENU (RCtrl / Q)            : Save state & Exit
  */
 
 #include <stdio.h>
@@ -1756,7 +1756,7 @@ static void render_help_modal(void) {
         { "B Button",     "Toggle Triads <-> 7th Chords" },
         { "L1 / R1",      "Cycle Open / E-Barre / A-Barre" },
         { "SELECT",       "Lock Key (Explore) vs Rotate Key" },
-        { "X / START",    "X: Add to Loop  |  START: Quit" }
+        { "X / MENU",     "X: Add to Loop  |  MENU: Quit" }
     };
 
     for (int i = 0; i < 7; i++) {
@@ -1886,8 +1886,8 @@ int main(int argc, char *argv[]) {
             if (ev.type == SDL_KEYDOWN) {
                 SDLKey k = ev.key.keysym.sym;
 
-                /* START or MENU (or Q on desktop) saves state & quits */
-                if (k == V90_BTN_START || k == V90_BTN_MENU || k == SDLK_q) {
+                /* MENU (or Q on desktop) saves state & quits */
+                if (k == V90_BTN_MENU || k == SDLK_q) {
                     running = false;
                     break;
                 }

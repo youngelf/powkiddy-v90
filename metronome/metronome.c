@@ -7,7 +7,8 @@
  *   UP / DOWN                       : Increase / Decrease Tempo (BPM)
  *   LEFT / RIGHT                    : Cycle Time Signature (4/4, 3/4, 2/4, 5/4, 7/4)
  *   L1 / R1 (Tab / Backspace, [/])  : Decrease / Increase Click Drop-Rate by 5% (0%..100%)
- *   START  (Enter or 'Q' on Host)   : Save settings & Exit
+ *   Y Button (Space or 'Y'/'H')     : Open / Close Help Screen
+ *   MENU (Right Ctrl or 'Q')        : Save settings & Exit
  */
 
 #include <stdio.h>
@@ -69,6 +70,7 @@ typedef int SDLKey;
 #define SDLK_b          XK_b
 #define SDLK_x          XK_x
 #define SDLK_y          XK_y
+#define SDLK_h          XK_h
 #define SDLK_q          XK_q
 #define SDLK_LEFTBRACKET  XK_bracketleft
 #define SDLK_RIGHTBRACKET XK_bracketright
@@ -413,6 +415,7 @@ static void SDL_Quit(void) {
 #define V90_BTN_SELECT  SDLK_ESCAPE
 #define V90_BTN_START   SDLK_RETURN
 #define V90_BTN_RESET   SDLK_RCTRL
+#define V90_BTN_MENU    SDLK_RCTRL
 #define V90_BTN_UP      SDLK_UP
 #define V90_BTN_DOWN    SDLK_DOWN
 #define V90_BTN_LEFT    SDLK_LEFT
@@ -531,6 +534,7 @@ static volatile int g_bpm = DEFAULT_BPM;
 static volatile int g_time_sig_idx = 0; /* Index into k_time_sig_beats */
 static volatile int g_drop_pct = 0;     /* Click drop-rate (0% .. 100%, step 5%), starts at 0% */
 static volatile bool g_playing = false;
+static bool g_show_help = false;
 
 #define LOCK_IN_MEASURES 4
 
@@ -825,7 +829,6 @@ int main(int argc, char *argv[]) {
     bool up_held = false, down_held = false;
     Uint32 hold_start_ms = 0, last_repeat_ms = 0;
 
-    bool select_held = false, start_held = false;
     bool running = true;
 
     while (running) {
@@ -838,11 +841,28 @@ int main(int argc, char *argv[]) {
             } else if (ev.type == SDL_KEYDOWN) {
                 SDLKey k = ev.key.keysym.sym;
 
-                if (k == V90_BTN_SELECT) select_held = true;
-                if (k == V90_BTN_START)  start_held = true;
-
-                /* A Button (Left Alt or 'A' or Space): Play / Pause */
-                if (k == V90_BTN_A || k == SDLK_a || k == SDLK_SPACE) {
+                /* MENU (Right Ctrl or 'Q' on Host): Save & Exit */
+                if (k == V90_BTN_MENU
+#if defined(HOST_X11)
+                    || k == SDLK_q
+#endif
+                ) {
+                    running = false;
+                }
+                /* Y Button (Space or 'Y'/'H' on Host): Toggle Help overlay */
+                else if (k == V90_BTN_Y
+#if defined(HOST_X11)
+                         || k == SDLK_y || k == SDLK_h
+#endif
+                ) {
+                    g_show_help = !g_show_help;
+                } else if (g_show_help) {
+                    if (k == V90_BTN_A || k == V90_BTN_B || k == SDLK_a || k == SDLK_b) {
+                        g_show_help = false;
+                    }
+                }
+                /* A Button (Left Alt or 'A'): Play / Pause */
+                else if (k == V90_BTN_A || k == SDLK_a) {
                     g_playing = !g_playing;
                     if (g_playing) {
                         /* Immediately fire Beat 1 (accented) of Measure 1 when starting */
@@ -908,21 +928,8 @@ int main(int argc, char *argv[]) {
                     }
                     save_config();
                 }
-#if defined(HOST_X11)
-                /* START (Enter), Esc, or Q: Save & Exit on Linux Host */
-                else if (k == V90_BTN_START || k == V90_BTN_SELECT || k == SDLK_q) {
-                    running = false;
-                }
-#else
-                /* START: Save & Exit on PowKiddy V90 */
-                else if (k == V90_BTN_START) {
-                    running = false;
-                }
-#endif
             } else if (ev.type == SDL_KEYUP) {
                 SDLKey k = ev.key.keysym.sym;
-                if (k == V90_BTN_SELECT) select_held = false;
-                if (k == V90_BTN_START)  start_held = false;
                 if (k == V90_BTN_UP)     up_held = false;
                 if (k == V90_BTN_DOWN)   down_held = false;
             } else if (ev.type == SDL_JOYBUTTONDOWN) {
@@ -938,10 +945,6 @@ int main(int argc, char *argv[]) {
                     }
                 }
             }
-        }
-
-        if (select_held && start_held) {
-            running = false;
         }
 
         /* Smooth key repeat when holding UP or DOWN to change BPM quickly */
@@ -1084,10 +1087,39 @@ int main(int argc, char *argv[]) {
         draw_rect(screen, 0, 214, SCREEN_W, 1, col_border);
 
         Uint32 a_col = g_playing ? col_paused : col_beat;
-        draw_rect(screen, 6, 220, 88, 14, a_col);
-        draw_text_centered(screen, 50, 224, "[A] PLAY/PAUSE", 1, col_bg);
+        draw_rect(screen, 4, 220, 82, 14, a_col);
+        draw_text_centered(screen, 45, 224, "[A] PLAY/STOP", 1, col_bg);
 
-        draw_text(screen, 100, 224, "[UP/DN]BPM [L/R]SIG [START]EXIT", 1, col_white);
+        draw_text(screen, 91, 224, "[UP/DN]BPM [L/R]SIG [Y]HLP [MENU]EXIT", 1, col_white);
+
+        if (g_show_help) {
+            int mx = 14, my = 18, mw = SCREEN_W - 28, mh = SCREEN_H - 36;
+            draw_rect(screen, mx, my, mw, mh, col_panel);
+            draw_border(screen, mx, my, mw, mh, 2, col_blue);
+            draw_rect(screen, mx + 2, my + 2, mw - 4, 22, col_header);
+            draw_text_centered(screen, SCREEN_W / 2, my + 6, "METRONOME CONTROLS", 2, col_gold);
+
+            static const struct {
+                const char *btn;
+                const char *desc;
+            } k_help[6] = {
+                { "[A] BUTTON",  "PLAY / PAUSE METRONOME" },
+                { "[UP / DOWN]", "ADJUST TEMPO (30..260 BPM)" },
+                { "[LEFT/RIGHT]","CYCLE TIME SIG (4/4..7/4)" },
+                { "[L1 / R1]",   "CLICK DROP-RATE (0%..100%)" },
+                { "[Y] BUTTON",  "OPEN / CLOSE HELP SCREEN" },
+                { "[MENU]",      "SAVE SETTINGS & EXIT" }
+            };
+            for (int i = 0; i < 6; i++) {
+                int ry = my + 32 + i * 24;
+                draw_rect(screen, mx + 8, ry, 82, 18, col_box_idle);
+                draw_border(screen, mx + 8, ry, 82, 18, 1, col_gold);
+                draw_text_centered(screen, mx + 49, ry + 5, k_help[i].btn, 1, col_gold);
+                draw_text(screen, mx + 98, ry + 5, k_help[i].desc, 1, col_white);
+            }
+            draw_rect(screen, mx + 2, my + mh - 18, mw - 4, 16, col_header);
+            draw_text_centered(screen, SCREEN_W / 2, my + mh - 13, "PRESS [Y] TO CLOSE HELP", 1, col_blue);
+        }
 
         SDL_Flip(screen);
         SDL_Delay(16); /* ~60 FPS for crisp visual beat synchronization */
