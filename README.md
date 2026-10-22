@@ -22,6 +22,7 @@ Every application in this repository compiles both for the **PowKiddy V90 (`arm-
 | [`fretboard/`](fretboard/) | **Interactive Guitar Fretboard, CAGED Scale, Chord & Arpeggio Reference (`fretboard`)** — 15-fret neck with 14 scales, 5 CAGED boxes, 12 chord qualities, Reverse Chord Finder, 6 tunings, and Karplus-Strong synth | `/mnt/apps/fretboard/fretboard` | `fretboard/fretboard_linux` |
 | [`licktrainer/`](licktrainer/) | **Guitar Speed-Builder Practice Routine & Lick Coach (`licktrainer`)** — 25 exercises across 5 categories with 6-string tab, picking & fingerings, live 8-fret neck view, BPM speed ladder, and background Karplus-Strong synth | `/mnt/apps/licktrainer/licktrainer` | `licktrainer/licktrainer_linux` |
 | [`sightread/`](sightread/) | **Guitar Staff-to-Fretboard Sight-Reading Trainer (`sightread`)** — Prominent 70% Treble Clef (`8vb`) staff with programmatic quarter/eighth-note pieces, non-interactive 12-fret position map, 5 neck positions, 7 keys, and background Karplus-Strong synth | `/mnt/apps/sightread/sightread` | `sightread/sightread_linux` |
+| [`musicplayer/`](musicplayer/) | **Directory Music Player (`musicplayer`)** — Plays `.ogg`, `.flac`, and `.mp3` directories in filename order (`libvorbisfile`, `libFLAC`, `libmpg123`) with `/mnt/media` browser, `L1`/`R1` hold-to-seek, and persistent play-position resume | `/mnt/apps/musicplayer/musicplayer` | `musicplayer/musicplayer_linux` |
 | [`eartrainer/`](eartrainer/) | **Guitar Interval & Chord Ear Trainer (`eartrainer`)** — 12 intervals & 12 chord qualities with 6-string fretboard visualizer, 3-guess flow, and Karplus-Strong guitar synth | `/mnt/apps/eartrainer/eartrainer` | `eartrainer/eartrainer_linux` |
 | [`gmu/`](gmu/) | **Gmu Music Player (Keymap Fix & Port)** — Fixes swapped `A`/`B` & `X`/`Y` buttons on V90 and adds modern GCC desktop build support | `/mnt/apps/gmu/` | `gmu/gmu.bin` |
 | [`patch_bootlogo/`](patch_bootlogo/) | **Boot Splash Patcher** — Replaces the embedded PNG inside `/mnt/boot-logo` on a `powkiddy-q90-v90-cfw-v1.3.3.img` image | `/mnt/boot-logo` inside `.img` | `patch_bootlogo/patch_boot_logo` |
@@ -207,4 +208,21 @@ See [`sightread/README.md`](sightread/README.md) for controls, build instruction
 | Open Position (`EX #01 LVL1`, `C Maj`) | 5th Position (`EX #07 LVL2`, `G (1#)`, Playing) | 7th Position (`EX #16 LVL4`, `D (2#)`) | Controls & Guide (`Y`) |
 | :---: | :---: | :---: | :---: |
 | ![Open Position](sightread/promo/sightread_open.png) | ![5th Position](sightread/promo/sightread_pos5.png) | ![7th Position](sightread/promo/sightread_advanced.png) | ![Controls & Guide](sightread/promo/sightread_help.png) |
+
+
+---
+
+## 14. [Directory Music Player (`musicplayer`)](musicplayer/)
+
+A distraction-free `.ogg`, `.flac`, and `.mp3` directory music player ([`musicplayer/musicplayer.c`](musicplayer/musicplayer.c)) powered by **`libvorbisfile`**, **`libFLAC`**, and **`libmpg123`** on a background decoder thread:
+- **Opens to `/mnt/media` Directory Browser with `[RESUME]` at the Top**: Highlights the saved session (`[RESUME] <Directory>/<Track> (MM:SS)`) at index 0 when returning to the app, and lists directories with track counts. Selecting a directory with **`A`** loads all `.mp3`, `.ogg`, and `.flac` files in filename order and begins playback.
+- **Interactive Playlist (`UP`/`DOWN` + `B`) & Global Hold-to-Seek (`L1`/`R1`)**: In the Now Playing + Playlist view, **`A`** toggles Play/Pause, **`UP`/`DOWN`** moves the highlight cursor across the playlist, and **`B`** starts playing the highlighted song. **`L1`/`R1`** seeks backward/forward (hold to rewind/fast-forward) in both the Player view and the Directory Browser view.
+- **Persistent Playlist & Play Position (`MENU` to Quit, `Y` for Help)**: Pressing **`MENU`** saves the active file list and exact playback position (`position_ms`) to `/mnt/apps/musicplayer/musicplayer.cfg` (or `~/.musicplayer.cfg` on desktop).
+
+See [`musicplayer/README.md`](musicplayer/README.md) for controls, build instructions, and SD card deployment steps.
+
+| `/mnt/media` Directory Browser (with `[RESUME]`) | Now Playing (`FLAC`) & Playlist (`UP`/`DOWN` + `[B]`) | Ogg Vorbis (`OGG`) Playback | Controls & Guide (`Y`) |
+| :---: | :---: | :---: | :---: |
+| ![Directory Browser](musicplayer/promo/musicplayer_browser.png) | ![FLAC Playing & Playlist](musicplayer/promo/musicplayer_playing.png) | ![OGG Playback](musicplayer/promo/musicplayer_ogg.png) | ![Controls & Guide](musicplayer/promo/musicplayer_help.png) |
+
 

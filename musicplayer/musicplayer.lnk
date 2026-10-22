@@ -1,0 +1,5 @@
+title=Music Player
+description=MP3/OGG/FLAC Directory Music Player
+exec=/mnt/apps/musicplayer/musicplayer
+clock=700
+icon=/mnt/apps/musicplayer/icon.png
