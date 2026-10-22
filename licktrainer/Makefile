@@ -38,9 +38,9 @@ TARGET_LINUX  := licktrainer_linux
 SRCS          := licktrainer.c
 HDRS          := licktrainer_font.h
 
-.PHONY: all arm v90 linux linux-x64 host run-linux package clean
+.PHONY: all arm v90 linux linux-x64 host run-linux test package clean
 
-all: $(TARGET_ARM) $(TARGET_LINUX)
+all: $(TARGET_ARM) $(TARGET_LINUX) test
 
 arm: $(TARGET_ARM)
 v90: $(TARGET_ARM)
@@ -58,6 +58,9 @@ $(TARGET_LINUX): $(SRCS) $(HDRS)
 
 run-linux: $(TARGET_LINUX)
 	./$(TARGET_LINUX)
+
+test: $(TARGET_LINUX)
+	./$(TARGET_LINUX) --verify
 
 package: $(TARGET_ARM)
 	mkdir -p sdcard_package/apps/licktrainer

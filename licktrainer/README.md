@@ -2,7 +2,7 @@
 
 An interactive **6-string guitar tab player, live fretboard position coach, and automated BPM speed-builder** for the **PowKiddy V90** handheld (`MiyooCFW 1.3.3`, `320×240` 16-bit RGB565 display, Allwinner F1C100S `ARM926EJ-S`) and **Linux Desktop (`x86_64` X11)**.
 
-| Pentatonic Licks (`#01` Gilbert 4-Note Seq) | Legato & Arpeggios (`#10` 5-Str Sweep) | Warmup & Spider (`#21` 1-2-3-4 Spider) | Controls & Practice Guide (`Y`) |
+| Pentatonic Licks (`#05` Box 1 to 2 Slide) | Legato & Arpeggios (`#10` 5-Str Sweep) | Warmup & Spider (`#21` 1-2-3-4 Spider) | Controls & Practice Guide (`Y`) |
 | :---: | :---: | :---: | :---: |
 | ![Pentatonic Licks](promo/licktrainer_pentatonic.png) | ![Legato & Arpeggios](promo/licktrainer_legato.png) | ![Warmup & Spider](promo/licktrainer_spider.png) | ![Controls & Guide](promo/licktrainer_help.png) |
 
@@ -36,13 +36,13 @@ An interactive **6-string guitar tab player, live fretboard position coach, and 
 | :--- | :--- | :--- |
 | **Play / Pause (with 4-beat count-in)** | **A** (`SDLK_LALT`) | `A`, `Return`, or `Left Alt` |
 | **Cycle Audio Mix (`TAB+CLK` / `CLK ONLY` / `TAB ONLY`)** | **B** (`SDLK_LCTRL`) | `B` or `Left Ctrl` |
-| **Cycle Speed-Builder Ladder (`OFF`, `+2/2b`, `+5/4b`, `+5/8b`, `+10/4b`)** | **X** (`SDLK_LSHIFT`) | `X` or `Left Shift` |
+| **Cycle Speed-Builder Ladder (`OFF`, `+2/2b`, `+5/4b`, `+5/8b`, `+10/4b`)** | **SELECT** (`SDLK_ESCAPE`) | `C` or `Escape` |
+| **Transpose Key / Neck Fret Position (`E..Eb`)** | **X** (`SDLK_LSHIFT`) | `X` or `Left Shift` |
 | **Toggle Help & Practice Guide Overlay** | **Y** (`SDLK_SPACE`) | `Y`, `H`, or `Space` |
 | **Previous / Next Category (`1..5`)** | **L1** / **R1** (`SDLK_TAB` / `SDLK_BACKSPACE`) | `Tab` / `Backspace`, `[` / `]`, or `PageUp` / `PageDown` |
 | **Previous / Next Lick in Category** | **D-Pad LEFT** / **RIGHT** | `Left Arrow` / `Right Arrow` |
 | **Increase / Decrease Tempo (`BPM`)** | **D-Pad UP** / **DOWN** | `Up Arrow` / `Down Arrow` |
-| **Transpose Key / Neck Fret Position (`E..Eb`)** | **SELECT** (`SDLK_ESCAPE`) | `C` or `Escape` |
-| **Save Settings & Exit** | **START** (`SDLK_RETURN`) | `Q` |
+| **Save Settings & Exit** | **MENU** (`SDLK_RCTRL`) | `Q` |
 
 ---
 

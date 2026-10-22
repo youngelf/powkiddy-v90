@@ -21,6 +21,7 @@ Every application in this repository compiles both for the **PowKiddy V90 (`arm-
 | [`pocketband/`](pocketband/) | **Pocket Drum Machine, Bassline & Backing Track Jam Buddy (`pocketband`)** — `4/4` & `3/4` Blues/Rock/Jazz drum + bass + chord backing band with 12-fret guitar soloing scale map | `/mnt/apps/pocketband/pocketband` | `pocketband/pocketband_linux` |
 | [`fretboard/`](fretboard/) | **Interactive Guitar Fretboard, CAGED Scale, Chord & Arpeggio Reference (`fretboard`)** — 15-fret neck with 14 scales, 5 CAGED boxes, 12 chord qualities, Reverse Chord Finder, 6 tunings, and Karplus-Strong synth | `/mnt/apps/fretboard/fretboard` | `fretboard/fretboard_linux` |
 | [`licktrainer/`](licktrainer/) | **Guitar Speed-Builder Practice Routine & Lick Coach (`licktrainer`)** — 25 exercises across 5 categories with 6-string tab, picking & fingerings, live 8-fret neck view, BPM speed ladder, and background Karplus-Strong synth | `/mnt/apps/licktrainer/licktrainer` | `licktrainer/licktrainer_linux` |
+| [`sightread/`](sightread/) | **Guitar Staff-to-Fretboard Sight-Reading Trainer (`sightread`)** — Prominent 70% Treble Clef (`8vb`) staff with programmatic quarter/eighth-note pieces, non-interactive 12-fret position map, 5 neck positions, 7 keys, and background Karplus-Strong synth | `/mnt/apps/sightread/sightread` | `sightread/sightread_linux` |
 | [`eartrainer/`](eartrainer/) | **Guitar Interval & Chord Ear Trainer (`eartrainer`)** — 12 intervals & 12 chord qualities with 6-string fretboard visualizer, 3-guess flow, and Karplus-Strong guitar synth | `/mnt/apps/eartrainer/eartrainer` | `eartrainer/eartrainer_linux` |
 | [`gmu/`](gmu/) | **Gmu Music Player (Keymap Fix & Port)** — Fixes swapped `A`/`B` & `X`/`Y` buttons on V90 and adds modern GCC desktop build support | `/mnt/apps/gmu/` | `gmu/gmu.bin` |
 | [`patch_bootlogo/`](patch_bootlogo/) | **Boot Splash Patcher** — Replaces the embedded PNG inside `/mnt/boot-logo` on a `powkiddy-q90-v90-cfw-v1.3.3.img` image | `/mnt/boot-logo` inside `.img` | `patch_bootlogo/patch_boot_logo` |
@@ -187,6 +188,23 @@ A hands-free guitar technique coach, 6-string tab player, and automated BPM spee
 
 See [`licktrainer/README.md`](licktrainer/README.md) for controls, build instructions, and SD card deployment steps.
 
-| Pentatonic Licks (`#01` Gilbert 4-Note Seq) | Legato & Arpeggios (`#10` 5-Str Sweep) | Warmup & Spider (`#21` 1-2-3-4 Spider) | Controls & Practice Guide (`Y`) |
+| Pentatonic Licks (`#05` Box 1 to 2 Slide) | Legato & Arpeggios (`#10` 5-Str Sweep) | Warmup & Spider (`#21` 1-2-3-4 Spider) | Controls & Practice Guide (`Y`) |
 | :---: | :---: | :---: | :---: |
 | ![Pentatonic Licks](licktrainer/promo/licktrainer_pentatonic.png) | ![Legato & Arpeggios](licktrainer/promo/licktrainer_legato.png) | ![Warmup & Spider](licktrainer/promo/licktrainer_spider.png) | ![Controls & Guide](licktrainer/promo/licktrainer_help.png) |
+
+
+---
+
+## 13. [Guitar Staff-to-Fretboard Sight-Reading Trainer (`sightread`)](sightread/)
+
+A dual-view guitar sight-reading trainer ([`sightread/sightread.c`](sightread/sightread.c)) designed to connect standard `8vb` guitar treble notation to positions on the neck:
+- **Prominent Interactive Treble Clef Staff — Top 70% of the Screen (`y: 24..164`)**: Displays a 2-measure `4/4` musical piece with mixed quarter notes and beamed eighth-note pairs, ledger lines (`E2`–`E5`), and key signature sharps/flats. Use **`LEFT` / `RIGHT`** to move the highlight cursor across the staff, **`B`** to play the single highlighted note, or **`A`** to play/pause the entire piece.
+- **Non-Interactive 12-Fret Guitar Neck Reference — Bottom 30% (`y: 166..215`)**: Shows all note positions used in the piece strictly constrained to the active **Neck Position** (`OPEN (0-4fr)`, `POS 2 (2-5fr)`, `POS 5 (5-8fr)`, `POS 7 (7-10fr)`, `POS 9 (9-12fr)` via **`SELECT`**) and brightly highlights the currently selected/playing staff note with its left-hand finger (`0–4`).
+- **Programmatically Generated Progressive Exercises (`L1` / `R1`) & Background Karplus-Strong Synth**: Deterministically generates `EX #01..#99` across 4 progressive difficulty levels (`LVL1`–`LVL4`) and 7 key signatures (`X`), with all guitar string synthesis running on a dedicated background worker thread (`synth_worker_thread_fn`).
+
+See [`sightread/README.md`](sightread/README.md) for controls, build instructions, and SD card deployment steps.
+
+| Open Position (`EX #01 LVL1`, `C Maj`) | 5th Position (`EX #07 LVL2`, `G (1#)`, Playing) | 7th Position (`EX #16 LVL4`, `D (2#)`) | Controls & Guide (`Y`) |
+| :---: | :---: | :---: | :---: |
+| ![Open Position](sightread/promo/sightread_open.png) | ![5th Position](sightread/promo/sightread_pos5.png) | ![7th Position](sightread/promo/sightread_advanced.png) | ![Controls & Guide](sightread/promo/sightread_help.png) |
+

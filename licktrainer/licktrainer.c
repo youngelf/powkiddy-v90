@@ -543,8 +543,30 @@ typedef struct {
     int         num_steps;       /* 16 for 16th-note 4/4, 12 for triplets */
     int         steps_per_beat;  /* 4 for 16th notes, 3 for triplets */
     int         default_bpm;
+    uint16_t    allowed_pc_mask; /* Allowed pitch-class bitmask relative to root (0..11) */
     LickStep    steps[MAX_STEPS];
 } LickDef;
+
+/* Scale / Arpeggio Pitch-Class Bitmasks relative to Root (bit i = semitone i):
+ *   Minor Pentatonic : {0, 3, 5, 7, 10}          (1, b3, 4, 5, b7)
+ *   Natural Minor    : {0, 2, 3, 5, 7, 8, 10}    (1, 2, b3, 4, 5, b6, b7)
+ *   Harmonic Minor   : {0, 2, 3, 5, 7, 8, 11}    (1, 2, b3, 4, 5, b6, 7)
+ *   Minor Triad      : {0, 3, 7}                 (1, b3, 5)
+ *   Minor 7th Arp    : {0, 3, 7, 10}             (1, b3, 5, b7)
+ *   Dim 7th Arp      : {0, 3, 6, 9}              (1, b3, b5, bb7)
+ *   Blues Scale      : {0, 3, 5, 6, 7, 10}       (1, b3, 4, b5, 5, b7)
+ *   Hybrid Blues/Rock: {0, 2, 3, 4, 5, 6, 7, 9, 10} (Minor/Major Blues + Dorian 6th)
+ *   Chromatic Spider : 0x0FFF                    (All 12 semitones)
+ */
+#define PC_MINOR_PENTA    ((1u<<0)|(1u<<3)|(1u<<5)|(1u<<7)|(1u<<10))
+#define PC_NATURAL_MINOR  ((1u<<0)|(1u<<2)|(1u<<3)|(1u<<5)|(1u<<7)|(1u<<8)|(1u<<10))
+#define PC_HARMONIC_MINOR ((1u<<0)|(1u<<2)|(1u<<3)|(1u<<5)|(1u<<7)|(1u<<8)|(1u<<11))
+#define PC_MINOR_TRIAD    ((1u<<0)|(1u<<3)|(1u<<7))
+#define PC_MIN7_ARP       ((1u<<0)|(1u<<3)|(1u<<7)|(1u<<10))
+#define PC_DIM7_ARP       ((1u<<0)|(1u<<3)|(1u<<6)|(1u<<9))
+#define PC_BLUES          ((1u<<0)|(1u<<3)|(1u<<5)|(1u<<6)|(1u<<7)|(1u<<10))
+#define PC_HYBRID_BLUES   ((1u<<0)|(1u<<2)|(1u<<3)|(1u<<4)|(1u<<5)|(1u<<6)|(1u<<7)|(1u<<9)|(1u<<10))
+#define PC_CHROMATIC      0x0FFFu
 
 static const char *k_category_names[NUM_CATEGORIES] = {
     "PENTATONIC",
@@ -595,7 +617,7 @@ static const char k_str_labels[6] = { 'E', 'A', 'D', 'G', 'B', 'e' };
 static const LickDef k_licks[TOTAL_LICKS] = {
     /* ==================== 1. PENTATONIC LICKS (#01..#05) ==================== */
     {
-        0, "GILBERT 4-NOTE SEQ", "Paul Gilbert Box 1 Pentatonic Burner", 16, 4, 100,
+        0, "GILBERT 4-NOTE SEQ", "Paul Gilbert Box 1 Pentatonic Burner", 16, 4, 100, PC_MINOR_PENTA,
         {
             {4,0,1,'D'}, {4,3,4,'U'}, {5,0,1,'D'}, {4,3,4,'U'},
             {4,0,1,'D'}, {3,2,3,'U'}, {4,0,1,'D'}, {4,3,4,'U'},
@@ -604,7 +626,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        0, "ERIC JOHNSON 5S", "Cascading Pentatonic Waterfall", 16, 4, 96,
+        0, "ERIC JOHNSON 5S", "Cascading Pentatonic Waterfall", 16, 4, 96, PC_MINOR_PENTA,
         {
             {5,3,4,'D'}, {5,0,1,'P'}, {4,3,4,'D'}, {4,0,1,'U'},
             {3,2,3,'D'}, {4,3,4,'U'}, {4,0,1,'P'}, {3,2,3,'D'},
@@ -613,7 +635,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        0, "PENTATONIC THREES", "Ascending 12/8 Triplet Box 1 Sequence", 12, 3, 95,
+        0, "PENTATONIC THREES", "Ascending 12/8 Triplet Box 1 Sequence", 12, 3, 95, PC_MINOR_PENTA,
         {
             {0,0,1,'D'}, {0,3,4,'U'}, {1,0,1,'D'},
             {0,3,4,'U'}, {1,0,1,'D'}, {1,2,3,'U'},
@@ -622,7 +644,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        0, "WIDE STRING SKIP", "String-Skipping Minor Pentatonic Etude", 16, 4, 90,
+        0, "WIDE STRING SKIP", "String-Skipping Minor Pentatonic Etude", 16, 4, 90, PC_MINOR_PENTA,
         {
             {0,0,1,'D'}, {0,3,4,'U'}, {2,0,1,'D'}, {2,2,3,'U'},
             {1,0,1,'D'}, {1,2,3,'U'}, {3,0,1,'D'}, {3,2,3,'U'},
@@ -631,83 +653,96 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        0, "BOX 1 TO 2 SLIDE", "Diagonal Pentatonic Position Shift", 16, 4, 100,
+        /* Box 1 to Box 2 Diagonal Minor Pentatonic Run:
+         * E: 5->8 (A->C), A: 5->7 (D->E), D: 5->7 (G->A),
+         * G: 5->7 (C->D) slide with Finger 3 to 9 (E),
+         * B: 8->10 (G->A), e: 8->10 (C->D) slide with Finger 3 to 12 (E), 10 (D), B: 10 (A) */
+        0, "BOX 1 TO 2 SLIDE", "Diagonal Pentatonic Position Shift", 16, 4, 100, PC_MINOR_PENTA,
         {
             {0,0,1,'D'}, {0,3,3,'H'}, {1,0,1,'D'}, {1,2,3,'H'},
-            {1,4,3,'/'}, {2,2,1,'D'}, {2,4,3,'H'}, {3,2,1,'D'},
-            {3,4,3,'H'}, {3,6,3,'/'}, {4,5,2,'D'}, {4,8,4,'H'},
-            {5,5,1,'D'}, {5,8,4,'U'}, {5,5,1,'P'}, {4,8,4,'D'}
+            {2,0,1,'D'}, {2,2,3,'H'}, {3,0,1,'D'}, {3,2,3,'H'},
+            {3,4,3,'/'}, {4,3,1,'D'}, {4,5,3,'H'}, {5,3,1,'D'},
+            {5,5,3,'H'}, {5,7,3,'/'}, {5,5,1,'D'}, {4,5,3,'U'}
         }
     },
 
     /* ==================== 2. LEGATO & ARPEGGIOS (#06..#10) ==================== */
     {
-        1, "LEGATO 3-NPS ROLL", "Hammer-On & Pull-Off Stamina Builder", 16, 4, 95,
+        /* True 3-Notes-Per-String A Natural Minor Legato Roll across D, G, B, e strings:
+         * D: 5-7-9 (G-A-B), G: 5-7-9 (C-D-E), B: 6-8-10 (F-G-A), e: 7-8-10 (B-C-D) */
+        1, "LEGATO 3-NPS ROLL", "Hammer-On & Pull-Off Stamina Builder", 16, 4, 95, PC_NATURAL_MINOR,
         {
+            {2,0,1,'D'}, {2,2,2,'H'}, {2,4,4,'H'}, {2,2,2,'P'},
             {3,0,1,'D'}, {3,2,2,'H'}, {3,4,4,'H'}, {3,2,2,'P'},
-            {4,0,1,'D'}, {4,2,2,'H'}, {4,3,3,'H'}, {4,2,2,'P'},
-            {5,0,1,'D'}, {5,2,2,'H'}, {5,3,3,'H'}, {5,2,2,'P'},
-            {5,0,1,'P'}, {4,3,3,'D'}, {4,2,2,'P'}, {4,0,1,'P'}
+            {4,1,1,'D'}, {4,3,2,'H'}, {4,5,4,'H'}, {4,3,2,'P'},
+            {5,2,1,'D'}, {5,3,2,'H'}, {5,5,4,'H'}, {5,3,2,'P'}
         }
     },
     {
-        1, "MINOR TRIAD ARP", "3-String Minor Arpeggio Etude", 12, 3, 100,
+        /* Pure A Minor Triad Arpeggio (A - C - E) across D, G, B, e strings:
+         * D:7 (A), G:5 (C), B:5 (E), e:5 (A) -> e:8 (C) */
+        1, "MINOR TRIAD ARP", "3-String Minor Arpeggio Etude", 12, 3, 100, PC_MINOR_TRIAD,
         {
-            {3,4,3,'D'}, {4,2,2,'D'}, {5,0,1,'D'},
-            {5,3,4,'H'}, {5,0,1,'P'}, {4,2,2,'U'},
-            {3,4,3,'U'}, {4,2,2,'D'}, {5,0,1,'D'},
-            {5,3,4,'U'}, {5,0,1,'P'}, {4,2,2,'U'}
+            {2,2,3,'D'}, {3,0,1,'D'}, {4,0,1,'D'},
+            {5,0,1,'D'}, {5,3,4,'H'}, {5,0,1,'P'},
+            {4,0,1,'U'}, {3,0,1,'U'}, {2,2,3,'D'},
+            {3,0,1,'D'}, {4,0,1,'D'}, {5,0,1,'U'}
         }
     },
     {
-        1, "MIN7 SKIPPED ARP", "String-Skipped Minor 7th Arpeggio", 16, 4, 92,
+        /* Pure A Minor 7th String-Skipped Arpeggio (A - C - E - G) across Low E, D, B, e */
+        1, "MIN7 SKIPPED ARP", "String-Skipped Minor 7th Arpeggio", 16, 4, 92, PC_MIN7_ARP,
         {
-            {1,2,1,'D'}, {1,5,4,'H'}, {3,2,1,'D'}, {3,4,3,'H'},
-            {5,2,1,'D'}, {5,5,4,'H'}, {5,2,1,'P'}, {3,4,3,'D'},
-            {3,2,1,'P'}, {1,5,4,'D'}, {1,2,1,'P'}, {3,2,1,'D'},
-            {3,4,3,'H'}, {5,2,1,'D'}, {5,5,4,'U'}, {5,2,1,'P'}
+            {0,0,1,'D'}, {0,3,4,'H'}, {2,0,1,'D'}, {2,2,3,'H'},
+            {4,0,1,'D'}, {4,3,4,'H'}, {5,0,1,'D'}, {5,3,4,'H'},
+            {5,0,1,'P'}, {4,3,4,'D'}, {4,0,1,'P'}, {2,2,3,'D'},
+            {2,0,1,'P'}, {0,3,4,'D'}, {0,0,1,'P'}, {2,2,3,'D'}
         }
     },
     {
-        1, "DIM7 SYMMETRY ARP", "Symmetrical Diminished 7th Sequence", 16, 4, 96,
+        /* Pure A Diminished 7th Symmetrical Arpeggio (A - C - Eb - F#) with Finger-4 +3-fret slide */
+        1, "DIM7 SYMMETRY ARP", "Symmetrical Diminished 7th Sequence", 16, 4, 96, PC_DIM7_ARP,
         {
-            {3,1,1,'D'}, {3,4,4,'H'}, {4,3,3,'D'}, {5,1,1,'D'},
-            {5,4,4,'H'}, {5,1,1,'P'}, {4,3,3,'U'}, {3,4,4,'U'},
-            {3,4,1,'/'}, {3,7,4,'H'}, {4,6,3,'D'}, {5,4,1,'D'},
-            {5,7,4,'H'}, {5,4,1,'P'}, {4,6,3,'U'}, {3,7,4,'U'}
+            {3,0,1,'D'}, {3,3,4,'H'}, {4,2,2,'D'}, {5,0,1,'D'},
+            {5,3,4,'H'}, {5,6,4,'/'}, {5,3,1,'P'}, {4,5,2,'D'},
+            {3,6,3,'U'}, {3,3,1,'P'}, {4,5,2,'D'}, {5,3,1,'D'},
+            {5,6,4,'H'}, {5,3,1,'P'}, {4,2,2,'D'}, {5,0,1,'U'}
         }
     },
     {
-        1, "5-STR SWEEP SHAPE", "A-Shape 5-String Minor Sweep Arpeggio", 16, 4, 88,
+        /* Pure 5-String A Minor Sweep Arpeggio (A:7=E, D:7=A, G:5=C, B:5=E, e:5=A -> 8=C) */
+        1, "5-STR SWEEP SHAPE", "5th-Pos 5-String Minor Sweep Arpeggio", 16, 4, 88, PC_MINOR_TRIAD,
         {
-            {1,2,4,'D'}, {2,0,2,'D'}, {3,0,2,'D'}, {4,1,3,'D'},
-            {5,0,1,'D'}, {5,3,4,'H'}, {5,0,1,'P'}, {4,1,3,'U'},
-            {3,0,2,'U'}, {2,0,2,'U'}, {1,2,4,'U'}, {2,0,2,'D'},
-            {3,0,2,'D'}, {4,1,3,'D'}, {5,0,1,'D'}, {5,3,4,'U'}
+            {1,2,3,'D'}, {2,2,3,'D'}, {3,0,1,'D'}, {4,0,1,'D'},
+            {5,0,1,'D'}, {5,3,4,'H'}, {5,0,1,'P'}, {4,0,1,'U'},
+            {3,0,1,'U'}, {2,2,3,'U'}, {1,2,3,'U'}, {2,2,3,'D'},
+            {3,0,1,'D'}, {4,0,1,'D'}, {5,0,1,'D'}, {5,3,4,'U'}
         }
     },
 
     /* ==================== 3. ALTERNATE PICKING (#11..#15) ==================== */
     {
-        2, "GILBERT 3-NPS CELL", "Inside/Outside 6-Note Picking Etude", 12, 3, 105,
+        /* Paul Gilbert 6-Note Inside/Outside Picking Cell on B & High e (E-F-G-A-B-C) */
+        2, "GILBERT 3-NPS CELL", "Inside/Outside 6-Note Picking Etude", 12, 3, 105, PC_NATURAL_MINOR,
         {
-            {3,0,1,'D'}, {3,2,2,'U'}, {3,4,4,'D'},
-            {4,0,1,'U'}, {3,4,4,'D'}, {3,2,2,'U'},
-            {3,0,1,'D'}, {3,2,2,'U'}, {3,4,4,'D'},
-            {4,0,1,'U'}, {4,2,2,'D'}, {4,3,3,'U'}
+            {4,0,1,'D'}, {4,1,2,'U'}, {4,3,4,'D'},
+            {5,0,1,'U'}, {4,3,4,'D'}, {4,1,2,'U'},
+            {4,0,1,'D'}, {4,1,2,'U'}, {4,3,4,'D'},
+            {5,0,1,'U'}, {5,2,3,'D'}, {5,3,4,'U'}
         }
     },
     {
-        2, "NEOCLASSIC PEDAL", "Harmonic Minor High-e Pedal Point", 16, 4, 104,
+        /* True A Harmonic Minor High-e Pedal Point (A, B, C, F, G# leading tone at B:9) */
+        2, "NEOCLASSIC PEDAL", "Harmonic Minor High-e Pedal Point", 16, 4, 104, PC_HARMONIC_MINOR,
         {
-            {5,0,1,'D'}, {5,3,4,'U'}, {5,2,3,'D'}, {5,3,4,'U'},
-            {4,3,4,'D'}, {5,3,4,'U'}, {5,0,1,'D'}, {5,3,4,'U'},
-            {4,2,2,'D'}, {5,3,4,'U'}, {4,3,4,'D'}, {5,3,4,'U'},
-            {5,0,1,'D'}, {5,3,4,'U'}, {5,2,3,'D'}, {5,0,1,'U'}
+            {5,0,1,'D'}, {5,3,3,'U'}, {5,2,2,'D'}, {5,3,3,'U'},
+            {4,4,4,'D'}, {5,3,3,'U'}, {5,0,1,'D'}, {5,3,3,'U'},
+            {4,1,1,'D'}, {5,3,3,'U'}, {4,4,4,'D'}, {5,3,3,'U'},
+            {5,0,1,'D'}, {5,3,3,'U'}, {5,2,2,'D'}, {5,0,1,'U'}
         }
     },
     {
-        2, "DIATONIC 4-NOTE", "Strict Alternate Picking 3-NPS Climb", 16, 4, 100,
+        2, "DIATONIC 4-NOTE", "Strict Alternate Picking 3-NPS Climb", 16, 4, 100, PC_NATURAL_MINOR,
         {
             {0,0,1,'D'}, {0,2,2,'U'}, {0,3,3,'D'}, {1,0,1,'U'},
             {0,2,2,'D'}, {0,3,3,'U'}, {1,0,1,'D'}, {1,2,2,'U'},
@@ -716,7 +751,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        2, "DI MEOLA SYNCOPA", "Syncopated Cross-String Picking Etude", 16, 4, 98,
+        2, "DI MEOLA SYNCOPA", "Syncopated Cross-String Picking Etude", 16, 4, 98, PC_NATURAL_MINOR,
         {
             {2,2,3,'D'}, {3,0,1,'U'}, {3,2,3,'D'}, {4,1,2,'U'},
             {3,2,3,'D'}, {3,0,1,'U'}, {2,2,3,'D'}, {3,0,1,'U'},
@@ -725,7 +760,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        2, "CROSS-STRING JUMP", "Alternate Picking String-Crossing Drill", 16, 4, 94,
+        2, "CROSS-STRING JUMP", "Alternate Picking String-Crossing Drill", 16, 4, 94, PC_MINOR_PENTA,
         {
             {2,0,1,'D'}, {3,2,3,'U'}, {2,2,3,'D'}, {4,0,1,'U'},
             {2,0,1,'D'}, {4,3,4,'U'}, {3,0,1,'D'}, {5,0,1,'U'},
@@ -736,16 +771,18 @@ static const LickDef k_licks[TOTAL_LICKS] = {
 
     /* ==================== 4. BLUES & ROCK (#16..#20) ==================== */
     {
-        3, "BB & ALBERT TURN", "Classic Major/Minor Blues Turnaround", 16, 4, 92,
+        /* BB Box turnaround: Finger 2 slides on G string from 7fr (D) to 9fr (E),
+         * then Finger 1 plays 8fr on B & e strings and Finger 3 plays 10fr */
+        3, "BB & ALBERT TURN", "Classic Major/Minor Blues Turnaround", 16, 4, 92, PC_HYBRID_BLUES,
         {
-            {3,2,2,'D'}, {3,4,3,'/'}, {4,3,2,'U'}, {5,3,3,'D'},
-            {5,5,4,'U'}, {5,3,3,'P'}, {4,5,4,'D'}, {4,3,2,'U'},
-            {3,2,2,'D'}, {3,0,1,'P'}, {3,1,2,'H'}, {2,2,3,'D'},
+            {3,2,2,'D'}, {3,4,2,'/'}, {4,3,1,'U'}, {5,3,1,'D'},
+            {5,5,3,'U'}, {5,3,1,'P'}, {4,5,3,'D'}, {4,3,1,'U'},
+            {3,2,3,'D'}, {3,0,1,'P'}, {3,1,2,'H'}, {2,2,3,'D'},
             {3,0,1,'U'}, {4,0,1,'D'}, {4,3,4,'U'}, {5,0,1,'D'}
         }
     },
     {
-        3, "SRV TEXAS SHUFFLE", "Driving 12/8 Blues Box Groove", 12, 3, 108,
+        3, "SRV TEXAS SHUFFLE", "Driving 12/8 Blues Box Groove", 12, 3, 108, PC_HYBRID_BLUES,
         {
             {0,0,1,'D'}, {0,3,4,'U'}, {1,0,1,'D'},
             {1,1,2,'H'}, {1,2,3,'H'}, {2,0,1,'D'},
@@ -754,7 +791,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        3, "DORIAN MIXO RUN", "Hybrid Minor/Major 3rd & 6th Lick", 16, 4, 98,
+        3, "DORIAN MIXO RUN", "Hybrid Minor/Major 3rd & 6th Lick", 16, 4, 98, PC_HYBRID_BLUES,
         {
             {1,0,1,'D'}, {1,2,3,'H'}, {2,0,1,'D'}, {2,2,3,'H'},
             {3,0,1,'D'}, {3,1,2,'H'}, {4,0,1,'D'}, {4,2,3,'H'},
@@ -763,7 +800,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        3, "HENDRIX CHORD EMBL", "Double-Stop Style Melodic Fill", 16, 4, 88,
+        3, "HENDRIX CHORD EMBL", "Double-Stop Style Melodic Fill", 16, 4, 88, PC_MINOR_PENTA,
         {
             {2,0,1,'D'}, {2,2,3,'H'}, {3,0,1,'D'}, {2,2,3,'U'},
             {3,0,1,'D'}, {3,2,3,'H'}, {3,0,1,'P'}, {2,2,3,'D'},
@@ -772,7 +809,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        3, "BLUES b5 CASCADE", "Descending Blues Scale with Blue Note", 16, 4, 96,
+        3, "BLUES b5 CASCADE", "Descending Blues Scale with Blue Note", 16, 4, 96, PC_BLUES,
         {
             {5,3,4,'D'}, {5,0,1,'P'}, {4,3,4,'D'}, {4,0,1,'P'},
             {3,3,4,'D'}, {3,2,3,'P'}, {3,0,1,'P'}, {2,2,3,'D'},
@@ -783,7 +820,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
 
     /* ==================== 5. WARMUP & SPIDER (#21..#25) ==================== */
     {
-        4, "1-2-3-4 SPIDER", "Classic Chromatic 4-Finger Crawl", 16, 4, 90,
+        4, "1-2-3-4 SPIDER", "Classic Chromatic 4-Finger Crawl", 16, 4, 90, PC_CHROMATIC,
         {
             {0,0,1,'D'}, {0,1,2,'U'}, {0,2,3,'D'}, {0,3,4,'U'},
             {1,0,1,'D'}, {1,1,2,'U'}, {1,2,3,'D'}, {1,3,4,'U'},
@@ -792,7 +829,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        4, "1-3-2-4 PERMUTE", "Alternating Finger Independence Drill", 16, 4, 88,
+        4, "1-3-2-4 PERMUTE", "Alternating Finger Independence Drill", 16, 4, 88, PC_CHROMATIC,
         {
             {2,0,1,'D'}, {2,2,3,'U'}, {2,1,2,'D'}, {2,3,4,'U'},
             {3,0,1,'D'}, {3,2,3,'U'}, {3,1,2,'D'}, {3,3,4,'U'},
@@ -801,7 +838,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        4, "SKIPPING SPIDER", "String-Skipping Chromatic Spider (6-4-5-3)", 16, 4, 85,
+        4, "SKIPPING SPIDER", "String-Skipping Chromatic Spider (6-4-5-3)", 16, 4, 85, PC_CHROMATIC,
         {
             {0,0,1,'D'}, {0,1,2,'U'}, {0,2,3,'D'}, {0,3,4,'U'},
             {2,0,1,'D'}, {2,1,2,'U'}, {2,2,3,'D'}, {2,3,4,'U'},
@@ -810,7 +847,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        4, "DIAGONAL SPIDER", "Diagonal Chromatic Fretboard Shift", 16, 4, 90,
+        4, "DIAGONAL SPIDER", "Diagonal Chromatic Fretboard Shift", 16, 4, 90, PC_CHROMATIC,
         {
             {0,0,1,'D'}, {1,1,2,'U'}, {2,2,3,'D'}, {3,3,4,'U'},
             {1,0,1,'D'}, {2,1,2,'U'}, {3,2,3,'D'}, {4,3,4,'U'},
@@ -819,7 +856,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        4, "4-3-2-1 PINKY WORK", "Descending Pinky-First Finger Builder", 16, 4, 88,
+        4, "4-3-2-1 PINKY WORK", "Descending Pinky-First Finger Builder", 16, 4, 88, PC_CHROMATIC,
         {
             {5,3,4,'D'}, {5,2,3,'U'}, {5,1,2,'D'}, {5,0,1,'U'},
             {4,3,4,'D'}, {4,2,3,'U'}, {4,1,2,'D'}, {4,0,1,'U'},
@@ -828,6 +865,94 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     }
 };
+
+/*
+ * Built-in music-theory & left-hand biomechanics verifier for all 25 exercises:
+ *   1. Verifies every step's pitch class against the exercise's scale/arpeggio bitmask.
+ *   2. Verifies slides ('/'): same string, different fret, and SAME left-hand finger.
+ *   3. Verifies hammer-ons ('H'): same string, higher fret, and higher finger number.
+ *   4. Verifies pull-offs ('P'): same string, lower fret, and lower finger number.
+ *   5. Verifies no accidental unison duplicate pitches across adjacent strings.
+ */
+static bool verify_lick_library(bool verbose) {
+    bool all_ok = true;
+    const int anchor = 5; /* Key of A: root MIDI = 45 (A2) */
+    const int root_midi = k_open_midi[0] + anchor;
+
+    for (int i = 0; i < TOTAL_LICKS; i++) {
+        const LickDef *l = &k_licks[i];
+        for (int s = 0; s < l->num_steps; s++) {
+            const LickStep *st = &l->steps[s];
+            if (st->str < 0 || st->str > 5) {
+                fprintf(stderr, "[VERIFY FAIL] Lick #%02d (%s) step %d: invalid string %d\n",
+                        i + 1, l->title, s, st->str);
+                all_ok = false;
+                continue;
+            }
+            if (st->finger < 1 || st->finger > 4) {
+                fprintf(stderr, "[VERIFY FAIL] Lick #%02d (%s) step %d: invalid finger %d\n",
+                        i + 1, l->title, s, st->finger);
+                all_ok = false;
+            }
+            int midi = k_open_midi[st->str] + anchor + st->fret_off;
+            int pc = ((midi - root_midi) % 12 + 12) % 12;
+            if (!(l->allowed_pc_mask & (1u << pc))) {
+                fprintf(stderr,
+                        "[VERIFY FAIL] Lick #%02d (%s) step %d: str=%c fret=%d note=%s (pc=%d) not in scale mask 0x%03x\n",
+                        i + 1, l->title, s, k_str_labels[st->str], anchor + st->fret_off,
+                        k_note_names[midi % 12], pc, l->allowed_pc_mask);
+                all_ok = false;
+            }
+
+            if (s > 0) {
+                const LickStep *prev = &l->steps[s - 1];
+                int prev_midi = k_open_midi[prev->str] + anchor + prev->fret_off;
+
+                if (st->pick == '/') {
+                    if (st->str != prev->str || st->fret_off == prev->fret_off) {
+                        fprintf(stderr,
+                                "[VERIFY FAIL] Lick #%02d (%s) step %d: slide '/' must stay on same string and change fret\n",
+                                i + 1, l->title, s);
+                        all_ok = false;
+                    }
+                    if (st->finger != prev->finger) {
+                        fprintf(stderr,
+                                "[VERIFY FAIL] Lick #%02d (%s) step %d: slide '/' changed finger from %d to %d (must keep same finger)\n",
+                                i + 1, l->title, s, prev->finger, st->finger);
+                        all_ok = false;
+                    }
+                } else if (st->pick == 'H') {
+                    if (st->str != prev->str || st->fret_off <= prev->fret_off || st->finger <= prev->finger) {
+                        fprintf(stderr,
+                                "[VERIFY FAIL] Lick #%02d (%s) step %d: hammer-on 'H' invalid (str %d->%d, off %d->%d, finger %d->%d)\n",
+                                i + 1, l->title, s, prev->str, st->str, prev->fret_off, st->fret_off, prev->finger, st->finger);
+                        all_ok = false;
+                    }
+                } else if (st->pick == 'P') {
+                    if (st->str != prev->str || st->fret_off >= prev->fret_off || st->finger >= prev->finger) {
+                        fprintf(stderr,
+                                "[VERIFY FAIL] Lick #%02d (%s) step %d: pull-off 'P' invalid (str %d->%d, off %d->%d, finger %d->%d)\n",
+                                i + 1, l->title, s, prev->str, st->str, prev->fret_off, st->fret_off, prev->finger, st->finger);
+                        all_ok = false;
+                    }
+                }
+
+                /* Check for accidental unison pitch collision across different strings */
+                if (l->allowed_pc_mask != PC_CHROMATIC && st->str != prev->str && midi == prev_midi) {
+                    fprintf(stderr,
+                            "[VERIFY FAIL] Lick #%02d (%s) step %d: accidental unison pitch (%s) across strings %c and %c\n",
+                            i + 1, l->title, s, k_note_names[midi % 12], k_str_labels[prev->str], k_str_labels[st->str]);
+                    all_ok = false;
+                }
+            }
+        }
+        if (verbose) {
+            printf("[OK] #%02d %-18s (%2d steps, mask=0x%03x)\n",
+                   i + 1, l->title, l->num_steps, l->allowed_pc_mask);
+        }
+    }
+    return all_ok;
+}
 
 /* =========================================================================
  * Speed-Builder BPM Ladder Presets & Audio Mix Modes
@@ -1547,7 +1672,14 @@ int main(int argc, char *argv[]) {
             cli_auto_play = true;
         } else if (strcmp(argv[i], "--help-overlay") == 0) {
             g_show_help = true;
+        } else if (strcmp(argv[i], "--verify") == 0) {
+            return verify_lick_library(true) ? 0 : 1;
         }
+    }
+
+    if (!verify_lick_library(false)) {
+        fprintf(stderr, "Fatal: Lick library verification failed.\n");
+        return 1;
     }
 
     if (!cli_bpm_set) {

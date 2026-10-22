@@ -1,0 +1,5 @@
+title=Sight Reader
+description=Guitar Staff-to-Fretboard Sight-Reading Trainer
+exec=/mnt/apps/sightread/sightread
+icon=/mnt/apps/sightread/icon.png
+clock=702
