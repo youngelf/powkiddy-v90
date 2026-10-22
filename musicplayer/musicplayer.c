@@ -538,6 +538,23 @@ static void draw_text_clipped(SDL_Surface *s, int font_id, int x, int y, int max
     draw_text(s, font_id, x, y, buf, col);
 }
 
+static void draw_path_tail(SDL_Surface *s, int font_id, int x, int y, int max_w, const char *path, uint16_t col) {
+    if (!path || max_w <= 0) return;
+    if (text_width(font_id, path) <= max_w) {
+        draw_text(s, font_id, x, y, path, col);
+        return;
+    }
+    size_t len = strlen(path);
+    for (size_t off = 1; off < len; off++) {
+        char buf[300];
+        snprintf(buf, sizeof(buf), "..%s", path + off);
+        if (text_width(font_id, buf) <= max_w) {
+            draw_text(s, font_id, x, y, buf, col);
+            return;
+        }
+    }
+}
+
 /* =========================================================================
  * Audio Formats, Ring Buffer & Background Decoder Thread
  * (libmpg123 + libvorbisfile + libFLAC)
@@ -1176,12 +1193,39 @@ static int count_audio_files_in_dir(const char *dir_path) {
     return count;
 }
 
+/* Remove the [RESUME] notice from the Directory Browser once resume or any fresh playback starts */
+static void dismiss_resume_notice(void) {
+    g_has_saved_session = false;
+    if (g_browser_count > 0 && g_browser_items[0].type == BITEM_RESUME) {
+        if (g_browser_count > 1) {
+            memmove(&g_browser_items[0], &g_browser_items[1],
+                    (size_t)(g_browser_count - 1) * sizeof(BrowserItem));
+        }
+        g_browser_count--;
+        if (g_browser_cursor > 0) g_browser_cursor--;
+        if (g_browser_cursor >= g_browser_count) {
+            g_browser_cursor = (g_browser_count > 0) ? (g_browser_count - 1) : 0;
+        }
+    }
+}
+
 /* Populate the Directory Browser items for `dir_path` */
 static void scan_browser_directory(const char *dir_path) {
-    snprintf(g_browser_dir, sizeof(g_browser_dir), "%s", dir_path);
+    char resolved[PATH_MAX];
+    if (realpath(dir_path, resolved) != NULL) {
+        snprintf(g_browser_dir, sizeof(g_browser_dir), "%s", resolved);
+    } else {
+        snprintf(g_browser_dir, sizeof(g_browser_dir), "%s", dir_path);
+    }
+    /* Strip trailing slash unless root "/" */
+    size_t dlen = strlen(g_browser_dir);
+    while (dlen > 1 && g_browser_dir[dlen - 1] == '/') {
+        g_browser_dir[--dlen] = '\0';
+    }
+
     g_browser_count = 0;
 
-    /* 1. Top Highlighted Entry: [RESUME] if a valid saved session exists */
+    /* 1. Top Highlighted Entry: [RESUME] if a valid saved session exists and hasn't been used/dismissed */
     if (g_has_saved_session && g_saved_count > 0 &&
         g_saved_playing_idx >= 0 && g_saved_playing_idx < g_saved_count) {
         BrowserItem *it = &g_browser_items[g_browser_count++];
@@ -1195,25 +1239,24 @@ static void scan_browser_directory(const char *dir_path) {
         it->track_count = g_saved_pos_ms / 1000;
     }
 
-    /* 2. Count direct audio files in `dir_path` */
-    int direct_audio_count = count_audio_files_in_dir(dir_path);
+    /* 2. Count direct audio files in `g_browser_dir` */
+    int direct_audio_count = count_audio_files_in_dir(g_browser_dir);
     if (direct_audio_count > 0 && g_browser_count < MAX_BROWSER_ITEMS) {
         BrowserItem *it = &g_browser_items[g_browser_count++];
         memset(it, 0, sizeof(*it));
         it->type = BITEM_PLAY_DIR;
         snprintf(it->name, sizeof(it->name), "Play Entire Directory (%d tracks)", direct_audio_count);
-        snprintf(it->full_path, sizeof(it->full_path), "%s", dir_path);
+        snprintf(it->full_path, sizeof(it->full_path), "%s", g_browser_dir);
         it->track_count = direct_audio_count;
     }
 
-    /* 3. Parent directory '..' if not at root */
-    if (strcmp(dir_path, "/") != 0 && strcmp(dir_path, g_browser_root) != 0 &&
-        g_browser_count < MAX_BROWSER_ITEMS) {
+    /* 3. Parent directory '..' at ALL levels (including /mnt/media or initial toplevel) up to '/' */
+    if (strcmp(g_browser_dir, "/") != 0 && g_browser_count < MAX_BROWSER_ITEMS) {
         BrowserItem *it = &g_browser_items[g_browser_count++];
         memset(it, 0, sizeof(*it));
         it->type = BITEM_PARENT;
         snprintf(it->name, sizeof(it->name), ".. (Parent Directory)");
-        snprintf(it->full_path, sizeof(it->full_path), "%s", dir_path);
+        snprintf(it->full_path, sizeof(it->full_path), "%s", g_browser_dir);
         char *last_slash = strrchr(it->full_path, '/');
         if (last_slash && last_slash != it->full_path) {
             *last_slash = '\0';
@@ -1224,13 +1267,17 @@ static void scan_browser_directory(const char *dir_path) {
 
     /* 4. Scan subdirectories and supported audio files */
     int sortable_start = g_browser_count;
-    DIR *d = opendir(dir_path);
+    DIR *d = opendir(g_browser_dir);
     if (d) {
         struct dirent *de;
         while ((de = readdir(d)) != NULL && g_browser_count < MAX_BROWSER_ITEMS) {
             if (de->d_name[0] == '.') continue;
             char full[PATH_MAX];
-            snprintf(full, sizeof(full), "%s/%s", dir_path, de->d_name);
+            if (strcmp(g_browser_dir, "/") == 0) {
+                snprintf(full, sizeof(full), "/%.3500s", de->d_name);
+            } else {
+                snprintf(full, sizeof(full), "%.3500s/%.256s", g_browser_dir, de->d_name);
+            }
             struct stat st;
             if (stat(full, &st) != 0) continue;
 
@@ -1314,6 +1361,7 @@ static bool load_directory_playlist(const char *dir_path, int start_track_idx, i
     g_cursor_idx  = start_track_idx;
     g_playlist_scroll = 0;
 
+    dismiss_resume_notice();
     start_playlist_track(g_playing_idx, start_ms, auto_play);
     return true;
 }
@@ -1330,6 +1378,7 @@ static bool resume_saved_session(bool auto_play) {
     g_cursor_idx  = (g_saved_cursor_idx >= 0 && g_saved_cursor_idx < g_playlist_count)
                     ? g_saved_cursor_idx : g_playing_idx;
 
+    dismiss_resume_notice();
     start_playlist_track(g_playing_idx, g_saved_pos_ms, auto_play);
     return true;
 }
@@ -1477,7 +1526,7 @@ static void render_browser_view(SDL_Surface *screen) {
     fill_rect(screen, 4, 2, 82, 17, COL_CYAN);
     draw_text_centered(screen, FONT_UI_9, 45, 5, "MUSIC BROWSER", COL_BG);
 
-    draw_text_clipped(screen, FONT_UI_9, 92, 5, 186, g_browser_dir, COL_GOLD);
+    draw_path_tail(screen, FONT_UI_9, 92, 5, 186, g_browser_dir, COL_GOLD);
 
     fill_rect(screen, 283, 2, 33, 17, COL_PANEL_ALT);
     draw_border(screen, 283, 2, 33, 17, 1, COL_BORDER);
@@ -1542,10 +1591,9 @@ static void render_browser_view(SDL_Surface *screen) {
             snprintf(cnt_str, sizeof(cnt_str), "%d trk", it->track_count);
             draw_text(screen, FONT_DOT_8, 262, ry + 5, cnt_str, COL_MUTED);
         } else if (it->type == BITEM_AUDIO) {
-            uint16_t fcol = format_badge_col(it->fmt);
             fill_rect(screen, 10, ry + 2, 34, 14, COL_PANEL_ALT);
-            draw_border(screen, 10, ry + 2, 34, 14, 1, fcol);
-            draw_text_centered(screen, FONT_DOT_8, 27, ry + 5, format_badge_str(it->fmt), fcol);
+            draw_border(screen, 10, ry + 2, 34, 14, 1, COL_MUTED);
+            draw_text_centered(screen, FONT_DOT_8, 27, ry + 5, "SONG", COL_MUTED);
             draw_text_clipped(screen, FONT_UI_9, 48, ry + 3, 256, it->name,
                               is_sel ? COL_WHITE : COL_MUTED);
         }
@@ -1678,9 +1726,8 @@ static void render_player_view(SDL_Surface *screen) {
     draw_border(screen, 4, 104, 312, 111, 1, COL_BORDER);
 
     fill_rect(screen, 6, 106, 308, 15, COL_HEADER);
-    char pl_hdr[320];
-    snprintf(pl_hdr, sizeof(pl_hdr), "PLAYLIST: %.240s", g_playlist_dir);
-    draw_text_clipped(screen, FONT_DOT_8, 10, 110, 210, pl_hdr, COL_GOLD);
+    draw_text(screen, FONT_DOT_8, 10, 110, "DIR:", COL_GOLD);
+    draw_path_tail(screen, FONT_DOT_8, 36, 110, 184, g_playlist_dir, COL_GOLD);
     draw_text(screen, FONT_DOT_8, 226, 110, "[UP/DN]+[B] Play", COL_CYAN);
 
     int visible_rows = 5;
@@ -1719,13 +1766,8 @@ static void render_player_view(SDL_Surface *screen) {
         }
 
         uint16_t name_col = is_current ? COL_GREEN : (is_cursor ? COL_GOLD : COL_WHITE);
-        draw_text_clipped(screen, FONT_UI_9, 43, ry + 2, 228,
+        draw_text_clipped(screen, FONT_UI_9, 43, ry + 2, 266,
                           g_playlist_files[idx], name_col);
-
-        AudioFormat tfmt = detect_audio_format(g_playlist_files[idx]);
-        uint16_t tfcol = format_badge_col(tfmt);
-        draw_text_centered(screen, FONT_DOT_8, 294, ry + 4,
-                           format_badge_str(tfmt), tfcol);
     }
 
     /* ================= 4. BOTTOM CONTROLS FOOTER (y: 217..240) ================= */
@@ -1913,6 +1955,8 @@ int main(int argc, char *argv[]) {
 
     bool l1_held = false, r1_held = false;
     Uint32 seek_hold_start_ms = 0, last_seek_repeat_ms = 0;
+    bool up_held = false, down_held = false;
+    Uint32 nav_hold_start_ms = 0, last_nav_repeat_ms = 0;
     bool running = true;
 
     while (running) {
@@ -1983,6 +2027,7 @@ int main(int argc, char *argv[]) {
                          || k == SDLK_s || k == SDLK_c || k == SDLK_x
 #endif
                 ) {
+                    up_held = down_held = false;
                     if (g_view == VIEW_PLAYER) {
                         g_view = VIEW_BROWSER;
                     } else if (g_playlist_count > 0) {
@@ -1995,10 +2040,18 @@ int main(int argc, char *argv[]) {
                         if (g_browser_count > 0) {
                             g_browser_cursor = (g_browser_cursor + g_browser_count - 1) % g_browser_count;
                         }
+                        up_held = true;
+                        down_held = false;
+                        nav_hold_start_ms = now_ms;
+                        last_nav_repeat_ms = now_ms;
                     } else if (k == V90_BTN_DOWN) {
                         if (g_browser_count > 0) {
                             g_browser_cursor = (g_browser_cursor + 1) % g_browser_count;
                         }
+                        down_held = true;
+                        up_held = false;
+                        nav_hold_start_ms = now_ms;
+                        last_nav_repeat_ms = now_ms;
                     } else if (k == V90_BTN_LEFT) {
                         /* Navigate to parent directory */
                         for (int i = 0; i < g_browser_count; i++) {
@@ -2109,15 +2162,23 @@ int main(int argc, char *argv[]) {
                             start_playlist_track(g_cursor_idx, 0, true);
                         }
                     }
-                    /* UP / DOWN in Player: Highlight songs in the playlist */
+                    /* UP / DOWN in Player: Highlight songs in the playlist (hold to scroll quickly) */
                     else if (k == V90_BTN_UP) {
                         if (g_playlist_count > 0) {
                             g_cursor_idx = (g_cursor_idx + g_playlist_count - 1) % g_playlist_count;
                         }
+                        up_held = true;
+                        down_held = false;
+                        nav_hold_start_ms = now_ms;
+                        last_nav_repeat_ms = now_ms;
                     } else if (k == V90_BTN_DOWN) {
                         if (g_playlist_count > 0) {
                             g_cursor_idx = (g_cursor_idx + 1) % g_playlist_count;
                         }
+                        down_held = true;
+                        up_held = false;
+                        nav_hold_start_ms = now_ms;
+                        last_nav_repeat_ms = now_ms;
                     } else if (k == V90_BTN_LEFT) {
                         if (g_playlist_count > 0) {
                             g_cursor_idx -= 5;
@@ -2146,6 +2207,33 @@ int main(int argc, char *argv[]) {
                 ) {
                     r1_held = false;
                 }
+                if (k == V90_BTN_UP) {
+                    up_held = false;
+                }
+                if (k == V90_BTN_DOWN) {
+                    down_held = false;
+                }
+            }
+        }
+
+        /* Hold UP / DOWN to scroll quickly through the playlist or directory browser */
+        if (!g_show_help && (up_held || down_held) && (now_ms - nav_hold_start_ms > 250)) {
+            Uint32 repeat_ms = (now_ms - nav_hold_start_ms > 1100) ? 35 : 65;
+            if (now_ms - last_nav_repeat_ms >= repeat_ms) {
+                if (g_view == VIEW_BROWSER && g_browser_count > 0) {
+                    if (up_held) {
+                        g_browser_cursor = (g_browser_cursor + g_browser_count - 1) % g_browser_count;
+                    } else {
+                        g_browser_cursor = (g_browser_cursor + 1) % g_browser_count;
+                    }
+                } else if (g_view == VIEW_PLAYER && g_playlist_count > 0) {
+                    if (up_held) {
+                        g_cursor_idx = (g_cursor_idx + g_playlist_count - 1) % g_playlist_count;
+                    } else {
+                        g_cursor_idx = (g_cursor_idx + 1) % g_playlist_count;
+                    }
+                }
+                last_nav_repeat_ms = now_ms;
             }
         }
 
