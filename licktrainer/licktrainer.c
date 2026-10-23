@@ -239,7 +239,7 @@ static SDL_Surface *SDL_SetVideoMode(int width, int height, int bpp, Uint32 flag
 
     g_x11_win = XCreateSimpleWindow(
         g_x11_dpy, RootWindow(g_x11_dpy, scr),
-        120, 120, win_w, win_h, 1,
+        0, 0, win_w, win_h, 0,
         BlackPixel(g_x11_dpy, scr), BlackPixel(g_x11_dpy, scr)
     );
 
@@ -522,11 +522,10 @@ static void draw_text_centered(SDL_Surface *s, int font_id, int cx, int y, const
 }
 
 /* =========================================================================
- * Guitar Exercise & Lick Data Model (5 Categories x 5 Licks = 25 Exercises)
+ * Guitar Exercise & Lick Data Model (6 Categories, 33 Total Exercises)
  * ========================================================================= */
-#define NUM_CATEGORIES 5
-#define LICKS_PER_CAT  5
-#define TOTAL_LICKS    (NUM_CATEGORIES * LICKS_PER_CAT)
+#define NUM_CATEGORIES 6
+#define TOTAL_LICKS    33
 #define MAX_STEPS      16
 
 typedef struct {
@@ -544,6 +543,7 @@ typedef struct {
     int         steps_per_beat;  /* 4 for 16th notes, 3 for triplets */
     int         default_bpm;
     uint16_t    allowed_pc_mask; /* Allowed pitch-class bitmask relative to root (0..11) */
+    int8_t      beat_deg[4];     /* Diatonic degree (1..7) per beat for Jazz 7ths (0 = standard lick) */
     LickStep    steps[MAX_STEPS];
 } LickDef;
 
@@ -551,6 +551,7 @@ typedef struct {
  *   Minor Pentatonic : {0, 3, 5, 7, 10}          (1, b3, 4, 5, b7)
  *   Natural Minor    : {0, 2, 3, 5, 7, 8, 10}    (1, 2, b3, 4, 5, b6, b7)
  *   Harmonic Minor   : {0, 2, 3, 5, 7, 8, 11}    (1, 2, b3, 4, 5, b6, 7)
+ *   Major Scale      : {0, 2, 4, 5, 7, 9, 11}    (1, 2, 3, 4, 5, 6, 7)
  *   Minor Triad      : {0, 3, 7}                 (1, b3, 5)
  *   Minor 7th Arp    : {0, 3, 7, 10}             (1, b3, 5, b7)
  *   Dim 7th Arp      : {0, 3, 6, 9}              (1, b3, b5, bb7)
@@ -561,6 +562,7 @@ typedef struct {
 #define PC_MINOR_PENTA    ((1u<<0)|(1u<<3)|(1u<<5)|(1u<<7)|(1u<<10))
 #define PC_NATURAL_MINOR  ((1u<<0)|(1u<<2)|(1u<<3)|(1u<<5)|(1u<<7)|(1u<<8)|(1u<<10))
 #define PC_HARMONIC_MINOR ((1u<<0)|(1u<<2)|(1u<<3)|(1u<<5)|(1u<<7)|(1u<<8)|(1u<<11))
+#define PC_MAJOR_SCALE    ((1u<<0)|(1u<<2)|(1u<<4)|(1u<<5)|(1u<<7)|(1u<<9)|(1u<<11))
 #define PC_MINOR_TRIAD    ((1u<<0)|(1u<<3)|(1u<<7))
 #define PC_MIN7_ARP       ((1u<<0)|(1u<<3)|(1u<<7)|(1u<<10))
 #define PC_DIM7_ARP       ((1u<<0)|(1u<<3)|(1u<<6)|(1u<<9))
@@ -573,7 +575,28 @@ static const char *k_category_names[NUM_CATEGORIES] = {
     "LEGATO/ARP",
     "ALT PICK",
     "BLUES/ROCK",
-    "SPIDER"
+    "SPIDER",
+    "JAZZ 7THS"
+};
+
+/* Diatonic 7th Chord Metadata in Major Scale (1-indexed: degrees 1..7) */
+typedef struct {
+    const char *roman;       /* "Imaj7", "iim7", "iiim7", "IVmaj7", "V7", "vim7", "viim7b5" */
+    const char *roman_short; /* "I", "ii", "iii", "IV", "V7", "vi", "vii" */
+    const char *qual_suffix; /* "maj7", "m7", "m7", "maj7", "7", "m7", "m7b5" */
+    uint8_t     tones_pc[4]; /* Semitone offsets from Major key root for {1, 3, 5, 7} */
+    const char *tone_lbl[4]; /* Interval labels for {1, 3, 5, 7} of this chord */
+} Diatonic7thInfo;
+
+static const Diatonic7thInfo k_diatonic_7ths[8] = {
+    { "",        "",    "",     {0,  0, 0,  0}, {"",  "",   "",   ""  } },
+    { "Imaj7",   "I",   "maj7", {0,  4, 7, 11}, {"1", "3",  "5",  "7" } },
+    { "iim7",    "ii",  "m7",   {2,  5, 9,  0}, {"1", "b3", "5",  "b7"} },
+    { "iiim7",   "iii", "m7",   {4,  7, 11, 2}, {"1", "b3", "5",  "b7"} },
+    { "IVmaj7",  "IV",  "maj7", {5,  9, 0,  4}, {"1", "3",  "5",  "7" } },
+    { "V7",      "V7",  "7",    {7, 11, 2,  5}, {"1", "3",  "5",  "b7"} },
+    { "vim7",    "vi",  "m7",   {9,  0, 4,  7}, {"1", "b3", "5",  "b7"} },
+    { "viim7b5", "vii", "m7b5", {11, 2, 5,  9}, {"1", "b3", "b5", "b7"} }
 };
 
 /* 12 Transposable Keys with their primary guitar neck anchor fret */
@@ -607,17 +630,21 @@ static const int k_open_midi[6] = { 40, 45, 50, 55, 59, 64 };
 static const char k_str_labels[6] = { 'E', 'A', 'D', 'G', 'B', 'e' };
 
 /*
- * 25 Curated Guitar Exercises ordered per design review:
+ * 33 Curated Guitar Exercises across 6 Categories:
  *   Set 1 (#01..#05): PENTATONIC LICKS
  *   Set 2 (#06..#10): LEGATO & ARPEGGIOS
  *   Set 3 (#11..#15): ALTERNATE PICKING
  *   Set 4 (#16..#20): BLUES & ROCK
  *   Set 5 (#21..#25): WARMUP & SPIDER
+ *   Set 6 (#26..#33): JAZZ 7TH CHORD ARPEGGIOS (I, ii, iii, IV, V7, vi, viim7b5 -> 1-3-5-7)
  */
+static const int k_cat_start[NUM_CATEGORIES] = { 0, 5, 10, 15, 20, 25 };
+static const int k_cat_count[NUM_CATEGORIES] = { 5, 5,  5,  5,  5,  8 };
+
 static const LickDef k_licks[TOTAL_LICKS] = {
     /* ==================== 1. PENTATONIC LICKS (#01..#05) ==================== */
     {
-        0, "GILBERT 4-NOTE SEQ", "Paul Gilbert Box 1 Pentatonic Burner", 16, 4, 100, PC_MINOR_PENTA,
+        0, "GILBERT 4-NOTE SEQ", "Paul Gilbert Box 1 Pentatonic Burner", 16, 4, 100, PC_MINOR_PENTA, {0,0,0,0},
         {
             {4,0,1,'D'}, {4,3,4,'U'}, {5,0,1,'D'}, {4,3,4,'U'},
             {4,0,1,'D'}, {3,2,3,'U'}, {4,0,1,'D'}, {4,3,4,'U'},
@@ -626,7 +653,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        0, "ERIC JOHNSON 5S", "Cascading Pentatonic Waterfall", 16, 4, 96, PC_MINOR_PENTA,
+        0, "ERIC JOHNSON 5S", "Cascading Pentatonic Waterfall", 16, 4, 96, PC_MINOR_PENTA, {0,0,0,0},
         {
             {5,3,4,'D'}, {5,0,1,'P'}, {4,3,4,'D'}, {4,0,1,'U'},
             {3,2,3,'D'}, {4,3,4,'U'}, {4,0,1,'P'}, {3,2,3,'D'},
@@ -635,7 +662,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        0, "PENTATONIC THREES", "Ascending 12/8 Triplet Box 1 Sequence", 12, 3, 95, PC_MINOR_PENTA,
+        0, "PENTATONIC THREES", "Ascending 12/8 Triplet Box 1 Sequence", 12, 3, 95, PC_MINOR_PENTA, {0,0,0,0},
         {
             {0,0,1,'D'}, {0,3,4,'U'}, {1,0,1,'D'},
             {0,3,4,'U'}, {1,0,1,'D'}, {1,2,3,'U'},
@@ -644,7 +671,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        0, "WIDE STRING SKIP", "String-Skipping Minor Pentatonic Etude", 16, 4, 90, PC_MINOR_PENTA,
+        0, "WIDE STRING SKIP", "String-Skipping Minor Pentatonic Etude", 16, 4, 90, PC_MINOR_PENTA, {0,0,0,0},
         {
             {0,0,1,'D'}, {0,3,4,'U'}, {2,0,1,'D'}, {2,2,3,'U'},
             {1,0,1,'D'}, {1,2,3,'U'}, {3,0,1,'D'}, {3,2,3,'U'},
@@ -657,7 +684,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
          * E: 5->8 (A->C), A: 5->7 (D->E), D: 5->7 (G->A),
          * G: 5->7 (C->D) slide with Finger 3 to 9 (E),
          * B: 8->10 (G->A), e: 8->10 (C->D) slide with Finger 3 to 12 (E), 10 (D), B: 10 (A) */
-        0, "BOX 1 TO 2 SLIDE", "Diagonal Pentatonic Position Shift", 16, 4, 100, PC_MINOR_PENTA,
+        0, "BOX 1 TO 2 SLIDE", "Diagonal Pentatonic Position Shift", 16, 4, 100, PC_MINOR_PENTA, {0,0,0,0},
         {
             {0,0,1,'D'}, {0,3,3,'H'}, {1,0,1,'D'}, {1,2,3,'H'},
             {2,0,1,'D'}, {2,2,3,'H'}, {3,0,1,'D'}, {3,2,3,'H'},
@@ -670,7 +697,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
     {
         /* True 3-Notes-Per-String A Natural Minor Legato Roll across D, G, B, e strings:
          * D: 5-7-9 (G-A-B), G: 5-7-9 (C-D-E), B: 6-8-10 (F-G-A), e: 7-8-10 (B-C-D) */
-        1, "LEGATO 3-NPS ROLL", "Hammer-On & Pull-Off Stamina Builder", 16, 4, 95, PC_NATURAL_MINOR,
+        1, "LEGATO 3-NPS ROLL", "Hammer-On & Pull-Off Stamina Builder", 16, 4, 95, PC_NATURAL_MINOR, {0,0,0,0},
         {
             {2,0,1,'D'}, {2,2,2,'H'}, {2,4,4,'H'}, {2,2,2,'P'},
             {3,0,1,'D'}, {3,2,2,'H'}, {3,4,4,'H'}, {3,2,2,'P'},
@@ -681,7 +708,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
     {
         /* Pure A Minor Triad Arpeggio (A - C - E) across D, G, B, e strings:
          * D:7 (A), G:5 (C), B:5 (E), e:5 (A) -> e:8 (C) */
-        1, "MINOR TRIAD ARP", "3-String Minor Arpeggio Etude", 12, 3, 100, PC_MINOR_TRIAD,
+        1, "MINOR TRIAD ARP", "3-String Minor Arpeggio Etude", 12, 3, 100, PC_MINOR_TRIAD, {0,0,0,0},
         {
             {2,2,3,'D'}, {3,0,1,'D'}, {4,0,1,'D'},
             {5,0,1,'D'}, {5,3,4,'H'}, {5,0,1,'P'},
@@ -691,7 +718,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
     },
     {
         /* Pure A Minor 7th String-Skipped Arpeggio (A - C - E - G) across Low E, D, B, e */
-        1, "MIN7 SKIPPED ARP", "String-Skipped Minor 7th Arpeggio", 16, 4, 92, PC_MIN7_ARP,
+        1, "MIN7 SKIPPED ARP", "String-Skipped Minor 7th Arpeggio", 16, 4, 92, PC_MIN7_ARP, {0,0,0,0},
         {
             {0,0,1,'D'}, {0,3,4,'H'}, {2,0,1,'D'}, {2,2,3,'H'},
             {4,0,1,'D'}, {4,3,4,'H'}, {5,0,1,'D'}, {5,3,4,'H'},
@@ -701,7 +728,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
     },
     {
         /* Pure A Diminished 7th Symmetrical Arpeggio (A - C - Eb - F#) with Finger-4 +3-fret slide */
-        1, "DIM7 SYMMETRY ARP", "Symmetrical Diminished 7th Sequence", 16, 4, 96, PC_DIM7_ARP,
+        1, "DIM7 SYMMETRY ARP", "Symmetrical Diminished 7th Sequence", 16, 4, 96, PC_DIM7_ARP, {0,0,0,0},
         {
             {3,0,1,'D'}, {3,3,4,'H'}, {4,2,2,'D'}, {5,0,1,'D'},
             {5,3,4,'H'}, {5,6,4,'/'}, {5,3,1,'P'}, {4,5,2,'D'},
@@ -711,7 +738,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
     },
     {
         /* Pure 5-String A Minor Sweep Arpeggio (A:7=E, D:7=A, G:5=C, B:5=E, e:5=A -> 8=C) */
-        1, "5-STR SWEEP SHAPE", "5th-Pos 5-String Minor Sweep Arpeggio", 16, 4, 88, PC_MINOR_TRIAD,
+        1, "5-STR SWEEP SHAPE", "5th-Pos 5-String Minor Sweep Arpeggio", 16, 4, 88, PC_MINOR_TRIAD, {0,0,0,0},
         {
             {1,2,3,'D'}, {2,2,3,'D'}, {3,0,1,'D'}, {4,0,1,'D'},
             {5,0,1,'D'}, {5,3,4,'H'}, {5,0,1,'P'}, {4,0,1,'U'},
@@ -723,7 +750,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
     /* ==================== 3. ALTERNATE PICKING (#11..#15) ==================== */
     {
         /* Paul Gilbert 6-Note Inside/Outside Picking Cell on B & High e (E-F-G-A-B-C) */
-        2, "GILBERT 3-NPS CELL", "Inside/Outside 6-Note Picking Etude", 12, 3, 105, PC_NATURAL_MINOR,
+        2, "GILBERT 3-NPS CELL", "Inside/Outside 6-Note Picking Etude", 12, 3, 105, PC_NATURAL_MINOR, {0,0,0,0},
         {
             {4,0,1,'D'}, {4,1,2,'U'}, {4,3,4,'D'},
             {5,0,1,'U'}, {4,3,4,'D'}, {4,1,2,'U'},
@@ -733,7 +760,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
     },
     {
         /* True A Harmonic Minor High-e Pedal Point (A, B, C, F, G# leading tone at B:9) */
-        2, "NEOCLASSIC PEDAL", "Harmonic Minor High-e Pedal Point", 16, 4, 104, PC_HARMONIC_MINOR,
+        2, "NEOCLASSIC PEDAL", "Harmonic Minor High-e Pedal Point", 16, 4, 104, PC_HARMONIC_MINOR, {0,0,0,0},
         {
             {5,0,1,'D'}, {5,3,3,'U'}, {5,2,2,'D'}, {5,3,3,'U'},
             {4,4,4,'D'}, {5,3,3,'U'}, {5,0,1,'D'}, {5,3,3,'U'},
@@ -742,7 +769,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        2, "DIATONIC 4-NOTE", "Strict Alternate Picking 3-NPS Climb", 16, 4, 100, PC_NATURAL_MINOR,
+        2, "DIATONIC 4-NOTE", "Strict Alternate Picking 3-NPS Climb", 16, 4, 100, PC_NATURAL_MINOR, {0,0,0,0},
         {
             {0,0,1,'D'}, {0,2,2,'U'}, {0,3,3,'D'}, {1,0,1,'U'},
             {0,2,2,'D'}, {0,3,3,'U'}, {1,0,1,'D'}, {1,2,2,'U'},
@@ -751,7 +778,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        2, "DI MEOLA SYNCOPA", "Syncopated Cross-String Picking Etude", 16, 4, 98, PC_NATURAL_MINOR,
+        2, "DI MEOLA SYNCOPA", "Syncopated Cross-String Picking Etude", 16, 4, 98, PC_NATURAL_MINOR, {0,0,0,0},
         {
             {2,2,3,'D'}, {3,0,1,'U'}, {3,2,3,'D'}, {4,1,2,'U'},
             {3,2,3,'D'}, {3,0,1,'U'}, {2,2,3,'D'}, {3,0,1,'U'},
@@ -760,7 +787,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        2, "CROSS-STRING JUMP", "Alternate Picking String-Crossing Drill", 16, 4, 94, PC_MINOR_PENTA,
+        2, "CROSS-STRING JUMP", "Alternate Picking String-Crossing Drill", 16, 4, 94, PC_MINOR_PENTA, {0,0,0,0},
         {
             {2,0,1,'D'}, {3,2,3,'U'}, {2,2,3,'D'}, {4,0,1,'U'},
             {2,0,1,'D'}, {4,3,4,'U'}, {3,0,1,'D'}, {5,0,1,'U'},
@@ -773,7 +800,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
     {
         /* BB Box turnaround: Finger 2 slides on G string from 7fr (D) to 9fr (E),
          * then Finger 1 plays 8fr on B & e strings and Finger 3 plays 10fr */
-        3, "BB & ALBERT TURN", "Classic Major/Minor Blues Turnaround", 16, 4, 92, PC_HYBRID_BLUES,
+        3, "BB & ALBERT TURN", "Classic Major/Minor Blues Turnaround", 16, 4, 92, PC_HYBRID_BLUES, {0,0,0,0},
         {
             {3,2,2,'D'}, {3,4,2,'/'}, {4,3,1,'U'}, {5,3,1,'D'},
             {5,5,3,'U'}, {5,3,1,'P'}, {4,5,3,'D'}, {4,3,1,'U'},
@@ -782,7 +809,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        3, "SRV TEXAS SHUFFLE", "Driving 12/8 Blues Box Groove", 12, 3, 108, PC_HYBRID_BLUES,
+        3, "SRV TEXAS SHUFFLE", "Driving 12/8 Blues Box Groove", 12, 3, 108, PC_HYBRID_BLUES, {0,0,0,0},
         {
             {0,0,1,'D'}, {0,3,4,'U'}, {1,0,1,'D'},
             {1,1,2,'H'}, {1,2,3,'H'}, {2,0,1,'D'},
@@ -791,7 +818,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        3, "DORIAN MIXO RUN", "Hybrid Minor/Major 3rd & 6th Lick", 16, 4, 98, PC_HYBRID_BLUES,
+        3, "DORIAN MIXO RUN", "Hybrid Minor/Major 3rd & 6th Lick", 16, 4, 98, PC_HYBRID_BLUES, {0,0,0,0},
         {
             {1,0,1,'D'}, {1,2,3,'H'}, {2,0,1,'D'}, {2,2,3,'H'},
             {3,0,1,'D'}, {3,1,2,'H'}, {4,0,1,'D'}, {4,2,3,'H'},
@@ -800,7 +827,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        3, "HENDRIX CHORD EMBL", "Double-Stop Style Melodic Fill", 16, 4, 88, PC_MINOR_PENTA,
+        3, "HENDRIX CHORD EMBL", "Double-Stop Style Melodic Fill", 16, 4, 88, PC_MINOR_PENTA, {0,0,0,0},
         {
             {2,0,1,'D'}, {2,2,3,'H'}, {3,0,1,'D'}, {2,2,3,'U'},
             {3,0,1,'D'}, {3,2,3,'H'}, {3,0,1,'P'}, {2,2,3,'D'},
@@ -809,7 +836,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        3, "BLUES b5 CASCADE", "Descending Blues Scale with Blue Note", 16, 4, 96, PC_BLUES,
+        3, "BLUES b5 CASCADE", "Descending Blues Scale with Blue Note", 16, 4, 96, PC_BLUES, {0,0,0,0},
         {
             {5,3,4,'D'}, {5,0,1,'P'}, {4,3,4,'D'}, {4,0,1,'P'},
             {3,3,4,'D'}, {3,2,3,'P'}, {3,0,1,'P'}, {2,2,3,'D'},
@@ -820,7 +847,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
 
     /* ==================== 5. WARMUP & SPIDER (#21..#25) ==================== */
     {
-        4, "1-2-3-4 SPIDER", "Classic Chromatic 4-Finger Crawl", 16, 4, 90, PC_CHROMATIC,
+        4, "1-2-3-4 SPIDER", "Classic Chromatic 4-Finger Crawl", 16, 4, 90, PC_CHROMATIC, {0,0,0,0},
         {
             {0,0,1,'D'}, {0,1,2,'U'}, {0,2,3,'D'}, {0,3,4,'U'},
             {1,0,1,'D'}, {1,1,2,'U'}, {1,2,3,'D'}, {1,3,4,'U'},
@@ -829,7 +856,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        4, "1-3-2-4 PERMUTE", "Alternating Finger Independence Drill", 16, 4, 88, PC_CHROMATIC,
+        4, "1-3-2-4 PERMUTE", "Alternating Finger Independence Drill", 16, 4, 88, PC_CHROMATIC, {0,0,0,0},
         {
             {2,0,1,'D'}, {2,2,3,'U'}, {2,1,2,'D'}, {2,3,4,'U'},
             {3,0,1,'D'}, {3,2,3,'U'}, {3,1,2,'D'}, {3,3,4,'U'},
@@ -838,7 +865,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        4, "SKIPPING SPIDER", "String-Skipping Chromatic Spider (6-4-5-3)", 16, 4, 85, PC_CHROMATIC,
+        4, "SKIPPING SPIDER", "String-Skipping Chromatic Spider (6-4-5-3)", 16, 4, 85, PC_CHROMATIC, {0,0,0,0},
         {
             {0,0,1,'D'}, {0,1,2,'U'}, {0,2,3,'D'}, {0,3,4,'U'},
             {2,0,1,'D'}, {2,1,2,'U'}, {2,2,3,'D'}, {2,3,4,'U'},
@@ -847,7 +874,7 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        4, "DIAGONAL SPIDER", "Diagonal Chromatic Fretboard Shift", 16, 4, 90, PC_CHROMATIC,
+        4, "DIAGONAL SPIDER", "Diagonal Chromatic Fretboard Shift", 16, 4, 90, PC_CHROMATIC, {0,0,0,0},
         {
             {0,0,1,'D'}, {1,1,2,'U'}, {2,2,3,'D'}, {3,3,4,'U'},
             {1,0,1,'D'}, {2,1,2,'U'}, {3,2,3,'D'}, {4,3,4,'U'},
@@ -856,12 +883,94 @@ static const LickDef k_licks[TOTAL_LICKS] = {
         }
     },
     {
-        4, "4-3-2-1 PINKY WORK", "Descending Pinky-First Finger Builder", 16, 4, 88, PC_CHROMATIC,
+        4, "4-3-2-1 PINKY WORK", "Descending Pinky-First Finger Builder", 16, 4, 88, PC_CHROMATIC, {0,0,0,0},
         {
             {5,3,4,'D'}, {5,2,3,'U'}, {5,1,2,'D'}, {5,0,1,'U'},
             {4,3,4,'D'}, {4,2,3,'U'}, {4,1,2,'D'}, {4,0,1,'U'},
             {3,3,4,'D'}, {3,2,3,'U'}, {3,1,2,'D'}, {3,0,1,'U'},
             {2,3,4,'D'}, {2,2,3,'U'}, {2,1,2,'D'}, {2,0,1,'U'}
+        }
+    },
+
+    /* ==================== 6. JAZZ 7TH ARPEGGIOS (#26..#33) ==================== */
+    {
+        /* Bar 1 of 6th-Str Ascending Diatonic 7th Arpeggios: Imaj7, iim7, iiim7, IVmaj7 (1-3-5-7) */
+        5, "6TH-STR ASC I-IV", "Diatonic 1-3-5-7 Arps: Imaj7 iim7 iiim7 IVmaj7", 16, 4, 84, PC_MAJOR_SCALE, {1, 2, 3, 4},
+        {
+            {0,0,1,'D'}, {1,-1,1,'U'}, {1,2,4,'D'}, {2,1,2,'U'},
+            {0,2,2,'D'}, {1,0,1,'U'},  {1,4,4,'D'}, {2,2,3,'U'},
+            {1,-1,1,'D'}, {1,2,4,'U'}, {2,1,2,'D'}, {2,4,4,'U'},
+            {1,0,1,'D'}, {1,4,4,'U'},  {2,2,2,'D'}, {3,1,1,'U'}
+        }
+    },
+    {
+        /* Bar 2 of 6th-Str Ascending Diatonic 7th Arpeggios: V7, vim7, viim7b5, Imaj7 (1-3-5-7) */
+        5, "6TH-STR ASC V-I", "Diatonic 1-3-5-7 Arps: V7 vim7 viim7b5 Imaj7", 16, 4, 84, PC_MAJOR_SCALE, {5, 6, 7, 1},
+        {
+            {1,2,2,'D'}, {2,1,1,'U'}, {2,4,4,'D'}, {3,2,2,'U'},
+            {1,4,4,'D'}, {2,2,2,'U'}, {3,1,1,'D'}, {3,4,4,'U'},
+            {2,1,1,'D'}, {2,4,4,'U'}, {3,2,2,'D'}, {4,2,3,'U'},
+            {2,2,2,'D'}, {3,1,1,'U'}, {4,0,1,'D'}, {4,4,4,'U'}
+        }
+    },
+    {
+        /* Bar 1 of Voice-Led Alternating Diatonic 7ths: Imaj7(1-3-5-7), iim7(7-5-3-1), iiim7(1-3-5-7), IVmaj7(7-5-3-1) */
+        5, "VOICE-LED ALT I-IV", "Up 1-3-5-7 / Down 7-5-3-1: I ii iii IV", 16, 4, 84, PC_MAJOR_SCALE, {1, 2, 3, 4},
+        {
+            {0,0,1,'D'}, {1,-1,1,'U'}, {1,2,4,'D'}, {2,1,2,'U'},
+            {2,2,3,'D'}, {1,4,4,'U'},  {1,0,1,'D'}, {0,2,2,'U'},
+            {1,-1,1,'D'}, {1,2,4,'U'}, {2,1,2,'D'}, {2,4,4,'U'},
+            {3,1,1,'D'}, {2,2,2,'U'},  {1,4,4,'D'}, {1,0,1,'U'}
+        }
+    },
+    {
+        /* Bar 2 of Voice-Led Alternating Diatonic 7ths: V7(1-3-5-7), vim7(7-5-3-1), viim7b5(1-3-5-7), Imaj7(7-5-3-1) */
+        5, "VOICE-LED ALT V-I", "Up 1-3-5-7 / Down 7-5-3-1: V7 vi vii I", 16, 4, 84, PC_MAJOR_SCALE, {5, 6, 7, 1},
+        {
+            {1,2,2,'D'}, {2,1,1,'U'}, {2,4,4,'D'}, {3,2,2,'U'},
+            {3,4,4,'D'}, {3,1,1,'U'}, {2,2,2,'D'}, {1,4,4,'U'},
+            {2,1,1,'D'}, {2,4,4,'U'}, {3,2,2,'D'}, {4,2,3,'U'},
+            {4,4,4,'D'}, {4,0,1,'U'}, {3,1,1,'D'}, {2,2,2,'U'}
+        }
+    },
+    {
+        /* Bar 1 of Upper-Register Diatonic 7ths across D-G-B-e strings: Imaj7, iim7, iiim7, IVmaj7 (1-3-5-7) */
+        5, "UPPER-REG 7THS I-IV", "Upper Register 1-3-5-7: Imaj7 iim7 iiim7 IVmaj7", 16, 4, 82, PC_MAJOR_SCALE, {1, 2, 3, 4},
+        {
+            {2,2,2,'D'}, {3,1,1,'U'}, {4,0,1,'D'}, {4,4,4,'U'},
+            {2,4,4,'D'}, {3,2,2,'U'}, {4,2,3,'D'}, {5,0,1,'U'},
+            {3,1,1,'D'}, {4,0,1,'U'}, {4,4,4,'D'}, {5,2,2,'U'},
+            {3,2,2,'D'}, {4,2,3,'U'}, {5,0,1,'D'}, {5,4,4,'U'}
+        }
+    },
+    {
+        /* Bar 2 of Upper-Register Diatonic 7ths across D-G-B-e strings: V7, vim7, viim7b5, Imaj7 (1-3-5-7) */
+        5, "UPPER-REG 7THS V-I", "Upper Register 1-3-5-7: V7 vim7 viim7b5 Imaj7", 16, 4, 82, PC_MAJOR_SCALE, {5, 6, 7, 1},
+        {
+            {3,4,3,'D'}, {4,4,4,'U'}, {5,2,1,'D'}, {5,5,4,'U'},
+            {3,1,1,'D'}, {3,4,4,'U'}, {4,2,2,'D'}, {5,0,1,'U'},
+            {2,1,1,'D'}, {2,4,4,'U'}, {3,2,2,'D'}, {4,2,3,'U'},
+            {2,2,2,'D'}, {3,1,1,'U'}, {4,0,1,'D'}, {5,-1,1,'U'}
+        }
+    },
+    {
+        /* Bar 1 of Jazz Cycle of Fourths Diatonic 7th Arpeggios: Imaj7 -> IVmaj7 -> viim7b5 -> iiim7 (1-3-5-7) */
+        5, "CYCLE OF 4THS PT.1", "Jazz Cycle 1-3-5-7: Imaj7 IVmaj7 viim7b5 iiim7", 16, 4, 86, PC_MAJOR_SCALE, {1, 4, 7, 3},
+        {
+            {0,0,1,'D'}, {1,-1,1,'U'}, {1,2,4,'D'}, {2,1,2,'U'},
+            {1,0,1,'D'}, {1,4,4,'U'},  {2,2,2,'D'}, {3,1,1,'U'},
+            {2,1,1,'D'}, {2,4,4,'U'},  {3,2,2,'D'}, {4,2,3,'U'},
+            {1,-1,1,'D'}, {1,2,4,'U'}, {2,1,2,'D'}, {2,4,4,'U'}
+        }
+    },
+    {
+        /* Bar 2 of Jazz Cycle of Fourths (Turnaround): vim7 -> iim7 -> V7 -> Imaj7 (1-3-5-7) */
+        5, "CYCLE OF 4THS PT.2", "Jazz Turnaround 1-3-5-7: vim7 iim7 V7 Imaj7", 16, 4, 86, PC_MAJOR_SCALE, {6, 2, 5, 1},
+        {
+            {1,4,4,'D'}, {2,2,2,'U'}, {3,1,1,'D'}, {3,4,4,'U'},
+            {0,2,2,'D'}, {1,0,1,'U'}, {1,4,4,'D'}, {2,2,3,'U'},
+            {1,2,2,'D'}, {2,1,1,'U'}, {2,4,4,'D'}, {3,2,2,'U'},
+            {2,2,2,'D'}, {3,1,1,'U'}, {4,0,1,'D'}, {4,4,4,'U'}
         }
     }
 };
@@ -902,6 +1011,43 @@ static bool verify_lick_library(bool verbose) {
                         i + 1, l->title, s, k_str_labels[st->str], anchor + st->fret_off,
                         k_note_names[midi % 12], pc, l->allowed_pc_mask);
                 all_ok = false;
+            }
+
+            /* If this beat has a diatonic 7th chord assignment, verify exact {1,3,5,7} chord tones */
+            int beat_idx = s / l->steps_per_beat;
+            if (beat_idx >= 0 && beat_idx < 4 && l->beat_deg[beat_idx] >= 1 && l->beat_deg[beat_idx] <= 7) {
+                int deg = l->beat_deg[beat_idx];
+                const Diatonic7thInfo *ch = &k_diatonic_7ths[deg];
+                bool in_chord = false;
+                for (int t = 0; t < 4; t++) {
+                    if (pc == ch->tones_pc[t]) {
+                        in_chord = true;
+                        break;
+                    }
+                }
+                if (!in_chord) {
+                    fprintf(stderr,
+                            "[VERIFY FAIL] Lick #%02d (%s) step %d (beat %d, %s): note %s (pc=%d) is not in chord {1,3,5,7}\n",
+                            i + 1, l->title, s, beat_idx + 1, ch->roman, k_note_names[midi % 12], pc);
+                    all_ok = false;
+                }
+                /* At the end of each 4-note beat, verify all 4 tones (1,3,5,7) were played */
+                if ((s % 4) == 3 && l->steps_per_beat == 4) {
+                    uint8_t seen_mask = 0;
+                    for (int k = s - 3; k <= s; k++) {
+                        int m_k = k_open_midi[l->steps[k].str] + anchor + l->steps[k].fret_off;
+                        int pc_k = ((m_k - root_midi) % 12 + 12) % 12;
+                        for (int t = 0; t < 4; t++) {
+                            if (pc_k == ch->tones_pc[t]) seen_mask |= (1u << t);
+                        }
+                    }
+                    if (seen_mask != 0x0F) {
+                        fprintf(stderr,
+                                "[VERIFY FAIL] Lick #%02d (%s) beat %d (%s): did not cover all 4 chord tones {1,3,5,7} (mask=0x%x)\n",
+                                i + 1, l->title, beat_idx + 1, ch->roman, seen_mask);
+                        all_ok = false;
+                    }
+                }
             }
 
             if (s > 0) {
@@ -1110,6 +1256,14 @@ static bool synth_karplus_strong_step(int16_t *dst, int midi_note, char pick_typ
     return true;
 }
 
+static inline int current_lick_global_idx(void) {
+    int c = g_cat_idx;
+    if (c < 0 || c >= NUM_CATEGORIES) c = 0;
+    int l = g_lick_in_cat;
+    if (l < 0 || l >= k_cat_count[c]) l = 0;
+    return k_cat_start[c] + l;
+}
+
 static void *synth_worker_thread_fn(void *arg) {
     (void)arg;
     uint32_t done_gen = 0;
@@ -1124,7 +1278,7 @@ static void *synth_worker_thread_fn(void *arg) {
             break;
         }
         uint32_t req_gen = g_synth_gen;
-        int lick_idx = g_cat_idx * LICKS_PER_CAT + g_lick_in_cat;
+        int lick_idx = current_lick_global_idx();
         int key_idx  = g_key_idx;
         pthread_mutex_unlock(&g_synth_mutex);
 
@@ -1265,7 +1419,7 @@ static void load_config(void) {
         int val = 0;
         if (sscanf(line, "cat_idx=%d", &val) == 1 && val >= 0 && val < NUM_CATEGORIES) {
             g_cat_idx = val;
-        } else if (sscanf(line, "lick_in_cat=%d", &val) == 1 && val >= 0 && val < LICKS_PER_CAT) {
+        } else if (sscanf(line, "lick_in_cat=%d", &val) == 1 && val >= 0 && val < 16) {
             g_lick_in_cat = val;
         } else if (sscanf(line, "key_idx=%d", &val) == 1 && val >= 0 && val < NUM_KEYS) {
             g_key_idx = val;
@@ -1276,6 +1430,9 @@ static void load_config(void) {
         } else if (sscanf(line, "mix_mode=%d", &val) == 1 && val >= 0 && val < MIX_COUNT) {
             g_mix_mode = val;
         }
+    }
+    if (g_lick_in_cat >= k_cat_count[g_cat_idx]) {
+        g_lick_in_cat = 0;
     }
     fclose(f);
 }
@@ -1311,8 +1468,8 @@ static void render_help_overlay(SDL_Surface *screen) {
         uint16_t    col;
     } rows[] = {
         { "[A] Button",   "Play / Pause lick loop (4-beat count-in)",  COL_GREEN  },
-        { "[L1 / R1]",    "Switch Category (Pentatonic, Legato...)",   COL_CYAN   },
-        { "[LEFT/RIGHT]", "Previous / Next Lick (#01 .. #25)",         COL_WHITE  },
+        { "[L1 / R1]",    "Switch Category (Pentatonic..Jazz 7ths)",   COL_CYAN   },
+        { "[LEFT/RIGHT]", "Previous / Next Lick (#01 .. #33)",         COL_WHITE  },
         { "[UP / DOWN]",  "Adjust Tempo (BPM) & base ladder speed",    COL_GOLD   },
         { "[SELECT]",     "Cycle Speed Ladder (+2/+5/+10 BPM step)",   COL_ORANGE },
         { "[B] Button",   "Cycle Audio Mix (Tab+Click / Click / Tab)", COL_CYAN   },
@@ -1341,10 +1498,12 @@ static void render_ui(
     int cur_bar_in_stage,
     bool in_countin
 ) {
-    int lick_global_idx = g_cat_idx * LICKS_PER_CAT + g_lick_in_cat;
+    int lick_global_idx = current_lick_global_idx();
     const LickDef *lick = &k_licks[lick_global_idx];
     const KeyAnchor *key = &k_keys[g_key_idx];
     const LadderPreset *ladder = &k_ladders[g_ladder_idx];
+    int root_midi = k_open_midi[0] + key->anchor_fret;
+    bool is_jazz_7ths = (lick->beat_deg[0] >= 1 && lick->beat_deg[0] <= 7);
 
     fill_rect(screen, 0, 0, SCREEN_W, SCREEN_H, COL_BG);
 
@@ -1353,7 +1512,7 @@ static void render_ui(
     fill_rect(screen, 0, 23, SCREEN_W, 1, COL_BORDER);
 
     /* Category Badge */
-    uint16_t cat_cols[NUM_CATEGORIES] = { COL_CYAN, COL_ORANGE, COL_GOLD, COL_PURPLE, COL_GREEN };
+    uint16_t cat_cols[NUM_CATEGORIES] = { COL_CYAN, COL_ORANGE, COL_GOLD, COL_PURPLE, COL_GREEN, COL_ACCENT };
     uint16_t cat_col = cat_cols[g_cat_idx];
     fill_rect(screen, 4, 3, 68, 17, cat_col);
     draw_text_centered(screen, FONT_UI_9, 38, 6, k_category_names[g_cat_idx], COL_BG);
@@ -1386,32 +1545,65 @@ static void render_ui(
     snprintf(bpm_buf, sizeof(bpm_buf), "%d BPM", g_bpm);
     draw_text_centered(screen, FONT_UI_12, 50, 41, bpm_buf, COL_GOLD);
 
-    /* Center Card: Speed-Builder Ladder */
+    /* Center Card: Speed-Builder Ladder (or Diatonic Chord Bar Header in Jazz 7ths mode) */
     fill_rect(screen, 99, 26, 146, 36, COL_PANEL);
-    draw_border(screen, 99, 26, 146, 36, 1, (g_ladder_idx > 0) ? COL_ORANGE : COL_BORDER);
+    draw_border(screen, 99, 26, 146, 36, 1,
+                is_jazz_7ths ? COL_GOLD : ((g_ladder_idx > 0) ? COL_ORANGE : COL_BORDER));
 
-    char lad_hdr[40];
-    snprintf(lad_hdr, sizeof(lad_hdr), "LADDER: %s", ladder->label);
-    draw_text_centered(screen, FONT_DOT_8, 172, 29, lad_hdr,
-                       (g_ladder_idx > 0) ? COL_ORANGE : COL_MUTED);
+    if (is_jazz_7ths && !in_countin) {
+        /* Show the 4 diatonic 7th chords of this measure across the top of the center card */
+        char ch_line[64];
+        snprintf(ch_line, sizeof(ch_line), "%s  |  %s  |  %s  |  %s",
+                 k_diatonic_7ths[lick->beat_deg[0]].roman,
+                 k_diatonic_7ths[lick->beat_deg[1]].roman,
+                 k_diatonic_7ths[lick->beat_deg[2]].roman,
+                 k_diatonic_7ths[lick->beat_deg[3]].roman);
+        draw_text_centered(screen, FONT_DOT_8, 172, 29, ch_line, COL_GOLD);
 
-    int goal_bpm = g_base_bpm + ladder->goal_offset;
-    if (goal_bpm > MAX_BPM) goal_bpm = MAX_BPM;
-
-    char lad_sub[48];
-    if (in_countin && g_playing) {
-        snprintf(lad_sub, sizeof(lad_sub), "COUNT-IN: BEAT %d OF 4", cur_beat + 1);
-    } else if (g_ladder_idx > 0) {
-        snprintf(lad_sub, sizeof(lad_sub), "BAR %d/%d  |  %d->%d BPM",
-                 cur_bar_in_stage + 1, ladder->bars_per_step, g_base_bpm, goal_bpm);
-    } else {
-        snprintf(lad_sub, sizeof(lad_sub), "%s", lick->subtitle);
-        if (text_width(FONT_DOT_8, lad_sub) > 138) {
-            snprintf(lad_sub, sizeof(lad_sub), "STATIC TEMPO ([SEL] LADDER)");
+        int active_b = (cur_step / lick->steps_per_beat) & 3;
+        int deg = lick->beat_deg[active_b];
+        const Diatonic7thInfo *ch = &k_diatonic_7ths[deg];
+        const char *ch_root_name = k_note_names[(root_midi + ch->tones_pc[0]) % 12];
+        char sub_line[64];
+        snprintf(sub_line, sizeof(sub_line), "%s = %s%s (%s %s %s %s)",
+                 ch->roman, ch_root_name, ch->qual_suffix,
+                 k_note_names[(root_midi + ch->tones_pc[0]) % 12],
+                 k_note_names[(root_midi + ch->tones_pc[1]) % 12],
+                 k_note_names[(root_midi + ch->tones_pc[2]) % 12],
+                 k_note_names[(root_midi + ch->tones_pc[3]) % 12]);
+        if (text_width(FONT_DOT_8, sub_line) > 138) {
+            snprintf(sub_line, sizeof(sub_line), "%s: %s%s (%s %s %s %s)",
+                     ch->roman_short, ch_root_name, ch->qual_suffix,
+                     k_note_names[(root_midi + ch->tones_pc[0]) % 12],
+                     k_note_names[(root_midi + ch->tones_pc[1]) % 12],
+                     k_note_names[(root_midi + ch->tones_pc[2]) % 12],
+                     k_note_names[(root_midi + ch->tones_pc[3]) % 12]);
         }
+        draw_text_centered(screen, FONT_DOT_8, 172, 41, sub_line, COL_WHITE);
+    } else {
+        char lad_hdr[40];
+        snprintf(lad_hdr, sizeof(lad_hdr), "LADDER: %s", ladder->label);
+        draw_text_centered(screen, FONT_DOT_8, 172, 29, lad_hdr,
+                           (g_ladder_idx > 0) ? COL_ORANGE : COL_MUTED);
+
+        int goal_bpm = g_base_bpm + ladder->goal_offset;
+        if (goal_bpm > MAX_BPM) goal_bpm = MAX_BPM;
+
+        char lad_sub[48];
+        if (in_countin && g_playing) {
+            snprintf(lad_sub, sizeof(lad_sub), "COUNT-IN: BEAT %d OF 4", cur_beat + 1);
+        } else if (g_ladder_idx > 0) {
+            snprintf(lad_sub, sizeof(lad_sub), "BAR %d/%d  |  %d->%d BPM",
+                     cur_bar_in_stage + 1, ladder->bars_per_step, g_base_bpm, goal_bpm);
+        } else {
+            snprintf(lad_sub, sizeof(lad_sub), "%s", lick->subtitle);
+            if (text_width(FONT_DOT_8, lad_sub) > 138) {
+                snprintf(lad_sub, sizeof(lad_sub), "STATIC TEMPO ([SEL] LADDER)");
+            }
+        }
+        draw_text_centered(screen, FONT_DOT_8, 172, 41, lad_sub,
+                           in_countin ? COL_ACCENT : COL_WHITE);
     }
-    draw_text_centered(screen, FONT_DOT_8, 172, 41, lad_sub,
-                       in_countin ? COL_ACCENT : COL_WHITE);
 
     /* Ladder Progress Bar */
     int pb_x = 105, pb_y = 53, pb_w = 134, pb_h = 5;
@@ -1425,6 +1617,9 @@ static void render_ui(
         if (done_steps > total_steps_in_stage) done_steps = total_steps_in_stage;
         int fill_w = (done_steps * pb_w) / total_steps_in_stage;
         fill_rect(screen, pb_x, pb_y, fill_w, pb_h, COL_GREEN);
+    } else if (is_jazz_7ths) {
+        int fill_w = ((cur_step + 1) * pb_w) / lick->num_steps;
+        fill_rect(screen, pb_x, pb_y, fill_w, pb_h, COL_GOLD);
     }
 
     /* Right Card: 4 Beat LEDs & Mix Badge */
@@ -1454,8 +1649,8 @@ static void render_ui(
     int grid_w = nsteps * col_w;
     int grid_x0 = 26 + (286 - grid_w) / 2;
 
-    /* Left Labels: PK (Pick), Strings e B G D A E, FG (Finger) */
-    draw_text(screen, FONT_DOT_8, 8, 68, "PK", COL_CYAN);
+    /* Left Labels: PK (Pick) or CH (Chord/Deg), Strings e B G D A E, FG (Finger) */
+    draw_text(screen, FONT_DOT_8, 8, 68, is_jazz_7ths ? "DG" : "PK", is_jazz_7ths ? COL_GOLD : COL_CYAN);
     for (int row = 0; row < 6; row++) {
         int str_idx = 5 - row; /* Top row = string 5 ('e'), bottom row = string 0 ('E') */
         int sy = 83 + row * 10;
@@ -1485,12 +1680,27 @@ static void render_ui(
 
         const LickStep *st = &lick->steps[s];
 
-        /* 1. Picking / Articulation symbol above tab ('D', 'U', 'H', 'P', '/') */
-        char p_str[2] = { st->pick, '\0' };
-        uint16_t p_col = COL_CYAN;
-        if (st->pick == 'U') p_col = COL_GREEN;
-        else if (st->pick == 'H' || st->pick == 'P' || st->pick == '/') p_col = COL_ORANGE;
-        draw_text_centered(screen, FONT_DOT_8, scx, 68, p_str, is_cur ? COL_WHITE : p_col);
+        /* 1. Top row of Tab: In Jazz 7ths mode, show Chord Tone Degree (1,3,5,7) or Picking */
+        if (is_jazz_7ths) {
+            int beat_i = s / lick->steps_per_beat;
+            int deg = lick->beat_deg[beat_i];
+            const Diatonic7thInfo *ch = &k_diatonic_7ths[deg];
+            int s_midi = k_open_midi[st->str] + key->anchor_fret + st->fret_off;
+            int s_pc = ((s_midi - root_midi) % 12 + 12) % 12;
+            const char *deg_lbl = "1";
+            uint16_t deg_col = COL_CYAN;
+            if (s_pc == ch->tones_pc[0])      { deg_lbl = "1"; deg_col = COL_GOLD;   }
+            else if (s_pc == ch->tones_pc[1]) { deg_lbl = "3"; deg_col = COL_GREEN;  }
+            else if (s_pc == ch->tones_pc[2]) { deg_lbl = "5"; deg_col = COL_CYAN;   }
+            else if (s_pc == ch->tones_pc[3]) { deg_lbl = "7"; deg_col = COL_ORANGE; }
+            draw_text_centered(screen, FONT_DOT_8, scx, 68, deg_lbl, is_cur ? COL_WHITE : deg_col);
+        } else {
+            char p_str[2] = { st->pick, '\0' };
+            uint16_t p_col = COL_CYAN;
+            if (st->pick == 'U') p_col = COL_GREEN;
+            else if (st->pick == 'H' || st->pick == 'P' || st->pick == '/') p_col = COL_ORANGE;
+            draw_text_centered(screen, FONT_DOT_8, scx, 68, p_str, is_cur ? COL_WHITE : p_col);
+        }
 
         /* 2. Fret number on the active guitar string */
         if (st->str >= 0 && st->str < 6) {
@@ -1574,7 +1784,11 @@ static void render_ui(
         fill_rect(screen, neck_x0, sy, fret_w * num_frets, (str_idx == 0) ? 2 : 1, scol);
     }
 
-    /* Draw Ghosted Lick Shape Dots on Neck */
+    /* Draw Ghosted Lick Shape Dots on Neck (and highlight active 4-note chord arpeggio in Jazz 7ths mode) */
+    int active_beat_idx = (cur_step / lick->steps_per_beat) & 3;
+    int b_start = active_beat_idx * lick->steps_per_beat;
+    int b_end   = b_start + lick->steps_per_beat;
+
     for (int s = 0; s < nsteps; s++) {
         const LickStep *st = &lick->steps[s];
         if (st->str < 0) continue;
@@ -1583,8 +1797,34 @@ static void render_ui(
         if (rel_f >= 0 && rel_f < num_frets) {
             int fcx = neck_x0 + rel_f * fret_w + fret_w / 2;
             int sy  = neck_y0 + 4 + (5 - st->str) * 6;
-            fill_circle(screen, fcx, sy, 3, COL_PANEL_ALT);
-            draw_circle_outline(screen, fcx, sy, 3, COL_CYAN);
+            if (is_jazz_7ths) {
+                fill_circle(screen, fcx, sy, 2, COL_PANEL_ALT);
+                draw_circle_outline(screen, fcx, sy, 2, COL_DIM);
+            } else {
+                fill_circle(screen, fcx, sy, 3, COL_PANEL_ALT);
+                draw_circle_outline(screen, fcx, sy, 3, COL_CYAN);
+            }
+        }
+    }
+
+    /* In Jazz 7ths mode, highlight the 4 chord tones (1-3-5-7) of the active beat's chord on the fretboard */
+    if (is_jazz_7ths) {
+        int deg = lick->beat_deg[active_beat_idx];
+        const Diatonic7thInfo *ch = &k_diatonic_7ths[deg];
+        for (int s = b_start; s < b_end && s < nsteps; s++) {
+            const LickStep *st = &lick->steps[s];
+            if (st->str < 0) continue;
+            int actual_fret = key->anchor_fret + st->fret_off;
+            int rel_f = actual_fret - start_fret;
+            if (rel_f >= 0 && rel_f < num_frets) {
+                int fcx = neck_x0 + rel_f * fret_w + fret_w / 2;
+                int sy  = neck_y0 + 4 + (5 - st->str) * 6;
+                int s_midi = k_open_midi[st->str] + actual_fret;
+                int s_pc = ((s_midi - root_midi) % 12 + 12) % 12;
+                bool is_chord_root = (s_pc == ch->tones_pc[0]);
+                fill_circle(screen, fcx, sy, 4, is_chord_root ? COL_GOLD : COL_CYAN);
+                draw_circle_outline(screen, fcx, sy, 4, COL_WHITE);
+            }
         }
     }
 
@@ -1608,16 +1848,42 @@ static void render_ui(
         /* Right Live Note Readout (x: 244..312) */
         fill_rect(screen, 244, 164, 68, 47, COL_PANEL_ALT);
         draw_border(screen, 244, 164, 68, 47, 1, COL_GOLD);
-        draw_text_centered(screen, FONT_DOT_8, 278, 167, "ACTIVE NOTE", COL_MUTED);
 
-        char note_info[24];
-        snprintf(note_info, sizeof(note_info), "%s (Fret %d)", note_name, actual_fret);
-        draw_text_centered(screen, FONT_UI_10, 278, 179, note_info, COL_GOLD);
+        if (is_jazz_7ths) {
+            int deg = lick->beat_deg[active_beat_idx];
+            const Diatonic7thInfo *ch = &k_diatonic_7ths[deg];
+            const char *ch_root = k_note_names[(root_midi + ch->tones_pc[0]) % 12];
+            char ch_hdr[24];
+            snprintf(ch_hdr, sizeof(ch_hdr), "%s: %s%s", ch->roman_short, ch_root, ch->qual_suffix);
+            draw_text_centered(screen, FONT_DOT_8, 278, 167, ch_hdr, COL_GOLD);
 
-        const char *finger_names[5] = { "", "1:Index", "2:Middle", "3:Ring", "4:Pinky" };
-        draw_text_centered(screen, FONT_DOT_8, 278, 196,
-                           finger_names[(active_st->finger >= 1 && active_st->finger <= 4) ? active_st->finger : 1],
-                           COL_CYAN);
+            int s_pc = ((midi - root_midi) % 12 + 12) % 12;
+            const char *ivl_lbl = "1";
+            for (int t = 0; t < 4; t++) {
+                if (s_pc == ch->tones_pc[t]) {
+                    ivl_lbl = ch->tone_lbl[t];
+                    break;
+                }
+            }
+            char note_info[24];
+            snprintf(note_info, sizeof(note_info), "%s (%s)", note_name, ivl_lbl);
+            draw_text_centered(screen, FONT_UI_10, 278, 179, note_info, COL_WHITE);
+
+            char fg_info[24];
+            snprintf(fg_info, sizeof(fg_info), "Fret %d | Fg %d", actual_fret, active_st->finger);
+            draw_text_centered(screen, FONT_DOT_8, 278, 196, fg_info, COL_CYAN);
+        } else {
+            draw_text_centered(screen, FONT_DOT_8, 278, 167, "ACTIVE NOTE", COL_MUTED);
+
+            char note_info[24];
+            snprintf(note_info, sizeof(note_info), "%s (Fret %d)", note_name, actual_fret);
+            draw_text_centered(screen, FONT_UI_10, 278, 179, note_info, COL_GOLD);
+
+            const char *finger_names[5] = { "", "1:Index", "2:Middle", "3:Ring", "4:Pinky" };
+            draw_text_centered(screen, FONT_DOT_8, 278, 196,
+                               finger_names[(active_st->finger >= 1 && active_st->finger <= 4) ? active_st->finger : 1],
+                               COL_CYAN);
+        }
     }
 
     /* ================= 5. BOTTOM CONTROLS FOOTER (y: 217..240) ================= */
@@ -1648,6 +1914,7 @@ int main(int argc, char *argv[]) {
     /* Default BPM to the initial lick's recommended tempo if no config loaded */
     bool cli_bpm_set = false;
     bool cli_auto_play = false;
+    int  cli_step = -1;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--cat") == 0 && i + 1 < argc) {
@@ -1655,7 +1922,7 @@ int main(int argc, char *argv[]) {
             if (v >= 0 && v < NUM_CATEGORIES) g_cat_idx = v;
         } else if (strcmp(argv[i], "--lick") == 0 && i + 1 < argc) {
             int v = atoi(argv[++i]);
-            if (v >= 0 && v < LICKS_PER_CAT) g_lick_in_cat = v;
+            if (v >= 0 && v < 16) g_lick_in_cat = v;
         } else if (strcmp(argv[i], "--key") == 0 && i + 1 < argc) {
             int v = atoi(argv[++i]);
             if (v >= 0 && v < NUM_KEYS) g_key_idx = v;
@@ -1668,6 +1935,9 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[i], "--ladder") == 0 && i + 1 < argc) {
             int v = atoi(argv[++i]);
             if (v >= 0 && v < NUM_LADDERS) g_ladder_idx = v;
+        } else if (strcmp(argv[i], "--step") == 0 && i + 1 < argc) {
+            int v = atoi(argv[++i]);
+            if (v >= 0 && v < MAX_STEPS) cli_step = v;
         } else if (strcmp(argv[i], "--play") == 0) {
             cli_auto_play = true;
         } else if (strcmp(argv[i], "--help-overlay") == 0) {
@@ -1677,13 +1947,17 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    if (g_lick_in_cat >= k_cat_count[g_cat_idx]) {
+        g_lick_in_cat = 0;
+    }
+
     if (!verify_lick_library(false)) {
         fprintf(stderr, "Fatal: Lick library verification failed.\n");
         return 1;
     }
 
     if (!cli_bpm_set) {
-        g_bpm = g_base_bpm = k_licks[g_cat_idx * LICKS_PER_CAT + g_lick_in_cat].default_bpm;
+        g_bpm = g_base_bpm = k_licks[current_lick_global_idx()].default_bpm;
     }
 
     init_click_waveforms();
@@ -1734,9 +2008,12 @@ int main(int argc, char *argv[]) {
     if (cli_auto_play) {
         g_playing = true;
         in_countin = false;
-        cur_step = 5;
-        cur_beat = 1;
+        cur_step = (cli_step >= 0) ? cli_step : 5;
+        cur_beat = cur_step / k_licks[current_lick_global_idx()].steps_per_beat;
         cur_bar_in_stage = 1;
+    } else if (cli_step >= 0) {
+        cur_step = cli_step;
+        cur_beat = cur_step / k_licks[current_lick_global_idx()].steps_per_beat;
     }
 
     bool up_held = false, down_held = false;
@@ -1831,9 +2108,10 @@ int main(int argc, char *argv[]) {
 #endif
                 ) {
                     g_cat_idx = (g_cat_idx + NUM_CATEGORIES - 1) % NUM_CATEGORIES;
+                    if (g_lick_in_cat >= k_cat_count[g_cat_idx]) g_lick_in_cat = 0;
                     cur_step = 0;
                     cur_bar_in_stage = 0;
-                    g_bpm = g_base_bpm = k_licks[g_cat_idx * LICKS_PER_CAT + g_lick_in_cat].default_bpm;
+                    g_bpm = g_base_bpm = k_licks[current_lick_global_idx()].default_bpm;
                     request_lick_resynth();
                     save_config();
                 } else if (k == V90_BTN_R1 || k == V90_BTN_L2
@@ -1842,25 +2120,28 @@ int main(int argc, char *argv[]) {
 #endif
                 ) {
                     g_cat_idx = (g_cat_idx + 1) % NUM_CATEGORIES;
+                    if (g_lick_in_cat >= k_cat_count[g_cat_idx]) g_lick_in_cat = 0;
                     cur_step = 0;
                     cur_bar_in_stage = 0;
-                    g_bpm = g_base_bpm = k_licks[g_cat_idx * LICKS_PER_CAT + g_lick_in_cat].default_bpm;
+                    g_bpm = g_base_bpm = k_licks[current_lick_global_idx()].default_bpm;
                     request_lick_resynth();
                     save_config();
                 }
                 /* LEFT / RIGHT: Previous / Next Lick within Category */
                 else if (k == V90_BTN_LEFT) {
-                    g_lick_in_cat = (g_lick_in_cat + LICKS_PER_CAT - 1) % LICKS_PER_CAT;
+                    int cnt = k_cat_count[g_cat_idx];
+                    g_lick_in_cat = (g_lick_in_cat + cnt - 1) % cnt;
                     cur_step = 0;
                     cur_bar_in_stage = 0;
-                    g_bpm = g_base_bpm = k_licks[g_cat_idx * LICKS_PER_CAT + g_lick_in_cat].default_bpm;
+                    g_bpm = g_base_bpm = k_licks[current_lick_global_idx()].default_bpm;
                     request_lick_resynth();
                     save_config();
                 } else if (k == V90_BTN_RIGHT) {
-                    g_lick_in_cat = (g_lick_in_cat + 1) % LICKS_PER_CAT;
+                    int cnt = k_cat_count[g_cat_idx];
+                    g_lick_in_cat = (g_lick_in_cat + 1) % cnt;
                     cur_step = 0;
                     cur_bar_in_stage = 0;
-                    g_bpm = g_base_bpm = k_licks[g_cat_idx * LICKS_PER_CAT + g_lick_in_cat].default_bpm;
+                    g_bpm = g_base_bpm = k_licks[current_lick_global_idx()].default_bpm;
                     request_lick_resynth();
                     save_config();
                 }
@@ -1908,7 +2189,7 @@ int main(int argc, char *argv[]) {
 
         /* Advance Sequencer Clock */
         now_ms = SDL_GetTicks();
-        const LickDef *lick = &k_licks[g_cat_idx * LICKS_PER_CAT + g_lick_in_cat];
+        const LickDef *lick = &k_licks[current_lick_global_idx()];
         const LadderPreset *ladder = &k_ladders[g_ladder_idx];
         double beat_ms = 60000.0 / (double)g_bpm;
         double step_ms = beat_ms / (double)lick->steps_per_beat;
